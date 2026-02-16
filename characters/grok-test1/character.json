@@ -15,12 +15,13 @@
     "installing": { "file": "installing.png", "frameCount": 4, "frameDuration": 180, "loop": true },
     "testing": { "file": "testing.png", "frameCount": 6, "frameDuration": 160, "loop": true },
     "deploying": { "file": "deploying.png", "frameCount": 4, "frameDuration": 180, "loop": false },
+    "debugging": { "file": "debugging.png", "frameCount": 5, "frameDuration": 180, "loop": true },
     "cooking": { "file": "cooking.png", "frameCount": 4, "frameDuration": 180, "loop": true },
     "hatching": { "file": "hatching.png", "frameCount": 4, "frameDuration": 200, "loop": false },
     "downloading": { "file": "downloading.png", "frameCount": 4, "frameDuration": 180, "loop": true }
   },
   "fallbackMap": {
-    "debugging": "coding",
+    "debugging": "debugging",
     "testing": "coding",
     "deploying": "thinking",
     "cooking": "thinking",

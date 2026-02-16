@@ -65,6 +65,7 @@ function parseArgs(argv) {
     padding: 0,
     noResize: false,
     rows: 1,
+    saturate: 1.15,
   };
 
   let i = 2; // skip node and script path
@@ -107,6 +108,12 @@ function parseArgs(argv) {
         break;
       case "--rows":
         args.rows = parseInt(argv[++i], 10);
+        break;
+      case "--saturate":
+        args.saturate = parseFloat(argv[++i]);
+        break;
+      case "--no-saturate":
+        args.saturate = 1.0;
         break;
       default:
         if (!arg.startsWith("--")) {
@@ -220,19 +227,43 @@ async function removeBackground(sharpImg, bgColor, tolerance) {
 
   const pixels = Buffer.from(data);
   const channels = info.channels;
+  const w = info.width;
+  const h = info.height;
 
-  for (let i = 0; i < pixels.length; i += channels) {
-    const r = pixels[i];
-    const g = pixels[i + 1];
-    const b = pixels[i + 2];
+  // Flood-fill from edges — only remove bg-colored pixels connected to the border
+  const visited = new Uint8Array(w * h);
+  const queue = [];
+
+  // Seed from all border pixels
+  for (let x = 0; x < w; x++) {
+    queue.push(x + 0 * w);       // top row
+    queue.push(x + (h - 1) * w); // bottom row
+  }
+  for (let y = 0; y < h; y++) {
+    queue.push(0 + y * w);       // left col
+    queue.push((w - 1) + y * w); // right col
+  }
+
+  while (queue.length > 0) {
+    const idx = queue.pop();
+    if (visited[idx]) continue;
+    visited[idx] = 1;
+
+    const px = idx * channels;
+    const r = pixels[px];
+    const g = pixels[px + 1];
+    const b = pixels[px + 2];
     const dist = colorDistance(r, g, b, bgColor.r, bgColor.g, bgColor.b);
 
     if (dist < tolerance) {
-      pixels[i + 3] = 0; // fully transparent
-    } else if (dist < tolerance * 1.5) {
-      // Soft edge — partial transparency for smoother edges
-      const alpha = Math.round(((dist - tolerance) / (tolerance * 0.5)) * 255);
-      pixels[i + 3] = Math.min(pixels[i + 3], alpha);
+      pixels[px + 3] = 0; // make transparent
+
+      const x = idx % w;
+      const y = Math.floor(idx / w);
+      if (x > 0 && !visited[idx - 1]) queue.push(idx - 1);
+      if (x < w - 1 && !visited[idx + 1]) queue.push(idx + 1);
+      if (y > 0 && !visited[idx - w]) queue.push(idx - w);
+      if (y < h - 1 && !visited[idx + w]) queue.push(idx + w);
     }
   }
 
@@ -305,6 +336,11 @@ async function processStrip(inputPath, args) {
         fit: "contain",
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       });
+    }
+
+    // Boost colors to compensate for bg removal + downscale wash-out
+    if (args.saturate !== 1.0) {
+      frame = frame.modulate({ saturation: args.saturate });
     }
 
     const buf = await frame.png().toBuffer();

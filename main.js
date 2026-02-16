@@ -484,6 +484,7 @@ function createWindow() {
   });
 
   win.loadFile("pet.html");
+  win.setAlwaysOnTop(true, "screen-saver");
   win.setIgnoreMouseEvents(false);
 
   // Apply saved character once renderer is ready

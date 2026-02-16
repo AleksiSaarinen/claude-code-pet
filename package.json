@@ -40,11 +40,16 @@
       {
         "from": "hook.js",
         "to": "hook.js"
+      },
+      {
+        "from": "characters/",
+        "to": "characters/"
       }
     ]
   },
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.34.5"
   }
 }

@@ -44,6 +44,33 @@
     transition: filter 0.3s;
   }
 
+  /* ---- SPRITE SHEET MODE ---- */
+  .sprite-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 120px; height: 120px;
+    image-rendering: pixelated;
+    display: none;
+    z-index: 1;
+  }
+  .sprite-mode .sprite-canvas { display: block; }
+  .sprite-mode .antenna,
+  .sprite-mode .body,
+  .sprite-mode .eye,
+  .sprite-mode .mouth,
+  .sprite-mode .foot { display: none; }
+
+  @keyframes prismatic-cycle {
+    0% { filter: hue-rotate(0deg) saturate(1.2) brightness(1.1); }
+    25% { filter: hue-rotate(90deg) saturate(1.3) brightness(1.15); }
+    50% { filter: hue-rotate(180deg) saturate(1.2) brightness(1.1); }
+    75% { filter: hue-rotate(270deg) saturate(1.3) brightness(1.15); }
+    100% { filter: hue-rotate(360deg) saturate(1.2) brightness(1.1); }
+  }
+  .sprite-mode.tier-5 .sprite-canvas {
+    animation: prismatic-cycle 3s linear infinite;
+  }
+
   .body {
     position: absolute;
     left: 20px; top: 20px;
@@ -1495,6 +1522,7 @@
   <div class="scene" id="scene">
     <div class="status-label" id="statusLabel">idle</div>
     <div class="creature" id="creature">
+      <canvas id="spriteCanvas" class="sprite-canvas" width="120" height="120"></canvas>
       <div class="antenna"></div>
       <div class="body"></div>
       <div class="eye left"><div class="pupil"></div></div>
@@ -1531,6 +1559,154 @@
     let currentTier = 0;
     let unlockedMilestones = new Set();
     let lastProgression = null;
+
+    // ── SPRITE SHEET RENDERING ─────────────────────────────────────
+    const spriteCanvas = document.getElementById("spriteCanvas");
+    let spriteMode = false;
+    let spriteRenderer = null;
+
+    class SpriteRenderer {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+        this.config = null;
+        this.basePath = "";
+        this.images = {};
+        this.currentState = "idle";
+        this.currentFrame = 0;
+        this.frameTimer = null;
+        this.tierIndex = 0;
+      }
+
+      async loadCharacter(charPath) {
+        this.destroy();
+        let normalized = charPath.replace(/\\/g, "/").replace(/\/?$/, "/");
+        // Ensure file:// protocol for local paths
+        if (!normalized.startsWith("file://")) {
+          normalized = "file:///" + normalized.replace(/^\/+/, "");
+        }
+        this.basePath = normalized;
+
+        const configPath = this.basePath + "character.json";
+        const raw = await fetch(configPath).then(r => r.text());
+        this.config = JSON.parse(raw);
+
+        // Defaults
+        if (!this.config.frameWidth) this.config.frameWidth = 120;
+        if (!this.config.frameHeight) this.config.frameHeight = 120;
+        if (!this.config.defaultFrameDuration) this.config.defaultFrameDuration = 150;
+        if (!this.config.fallbackMap) this.config.fallbackMap = {};
+        if (!this.config.states) this.config.states = {};
+        if (!this.config.tierStrategy) this.config.tierStrategy = "filter";
+        if (this.config.particlesEnabled === undefined) this.config.particlesEnabled = true;
+        if (this.config.accessoriesEnabled === undefined) this.config.accessoriesEnabled = true;
+
+        // Preload all sprite images
+        const loadPromises = [];
+        for (const [stateKey, stateConf] of Object.entries(this.config.states)) {
+          loadPromises.push(this._loadImage(stateKey, stateConf.file));
+        }
+        await Promise.allSettled(loadPromises);
+
+        this.setState("idle");
+      }
+
+      _loadImage(stateKey, filename) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => { this.images[stateKey] = img; resolve(); };
+          img.onerror = () => { resolve(); }; // skip missing images
+          img.src = this.basePath + filename;
+        });
+      }
+
+      resolveState(key) {
+        // Direct match
+        if (this.config.states[key] && this.images[key]) return key;
+        // Walk fallback chain
+        const visited = new Set();
+        let current = key;
+        while (this.config.fallbackMap[current] && !visited.has(current)) {
+          visited.add(current);
+          current = this.config.fallbackMap[current];
+          if (this.config.states[current] && this.images[current]) return current;
+        }
+        // Ultimate fallback
+        return this.images["idle"] ? "idle" : null;
+      }
+
+      setState(stateKey) {
+        const resolved = this.resolveState(stateKey);
+        if (!resolved) return;
+
+        this.currentState = resolved;
+        this.currentFrame = 0;
+
+        if (this.frameTimer) {
+          clearInterval(this.frameTimer);
+          this.frameTimer = null;
+        }
+
+        const stateConf = this.config.states[resolved];
+        const frameCount = stateConf.frameCount || 1;
+        const duration = stateConf.frameDuration || this.config.defaultFrameDuration;
+        const loop = stateConf.loop !== false;
+
+        this._drawFrame();
+
+        if (frameCount > 1) {
+          this.frameTimer = setInterval(() => {
+            this.currentFrame++;
+            if (this.currentFrame >= frameCount) {
+              if (loop) {
+                this.currentFrame = 0;
+              } else {
+                this.currentFrame = frameCount - 1;
+                clearInterval(this.frameTimer);
+                this.frameTimer = null;
+                return;
+              }
+            }
+            this._drawFrame();
+          }, duration);
+        }
+      }
+
+      _drawFrame() {
+        const img = this.images[this.currentState];
+        if (!img) return;
+
+        const fw = this.config.frameWidth;
+        const fh = this.config.frameHeight;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.drawImage(img, this.currentFrame * fw, 0, fw, fh, 0, 0, this.canvas.width, this.canvas.height);
+      }
+
+      setTier(tierIndex) {
+        this.tierIndex = tierIndex;
+        if (this.config && this.config.tierStrategy === "filter") {
+          const filters = this.config.tierFilters || {};
+          const filterVal = filters[String(tierIndex)] || "none";
+          // Tier 5 prismatic is handled by CSS animation
+          if (tierIndex !== 5) {
+            this.canvas.style.filter = filterVal;
+          } else {
+            this.canvas.style.filter = "";
+          }
+        }
+      }
+
+      destroy() {
+        if (this.frameTimer) {
+          clearInterval(this.frameTimer);
+          this.frameTimer = null;
+        }
+        this.ctx && this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.images = {};
+        this.config = null;
+        this.currentFrame = 0;
+      }
+    }
 
     // Map state → display name for the skill label
     const STATE_SKILL_NAME = {
@@ -2682,11 +2858,24 @@
         ipcRenderer.send("idle-variant-change", "idle");
       }
 
-      scene.className = "scene state-" + variant + " tier-" + currentTier;
+      const spriteClass = spriteMode ? " sprite-mode" : "";
+      scene.className = "scene state-" + variant + " tier-" + currentTier + spriteClass;
       label.textContent = config.label;
       currentState = variant;
-      updateAccessories(config);
-      updateParticles(config);
+
+      if (spriteMode && spriteRenderer) {
+        spriteRenderer.setState(variant);
+      }
+
+      const showAccessories = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
+      const showParticles = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
+
+      if (showAccessories) updateAccessories(config);
+      else accessoryLayer.innerHTML = "";
+
+      if (showParticles) updateParticles(config);
+      else { if (particleInterval) { clearInterval(particleInterval); particleInterval = null; } particleLayer.innerHTML = ""; }
+
       updateSkillLabel();
     }
 
@@ -2755,12 +2944,24 @@
 
       ipcRenderer.send("activity-variant-change", currentActivityVariant);
 
-      scene.className = "scene state-" + effectiveState + " tier-" + currentTier;
+      const spriteClass = spriteMode ? " sprite-mode" : "";
+      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + spriteClass;
       label.textContent = config.label || effectiveState;
       currentState = effectiveState;
 
-      updateAccessories(config);
-      updateParticles(config);
+      if (spriteMode && spriteRenderer) {
+        spriteRenderer.setState(effectiveState);
+      }
+
+      const showAccessories = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
+      const showParticles = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
+
+      if (showAccessories) updateAccessories(config);
+      else accessoryLayer.innerHTML = "";
+
+      if (showParticles) updateParticles(config);
+      else { if (particleInterval) { clearInterval(particleInterval); particleInterval = null; } particleLayer.innerHTML = ""; }
+
       updateSkillLabel();
     }
 
@@ -2957,6 +3158,9 @@
         scene.classList.remove("tier-" + currentTier);
         scene.classList.add("tier-" + tier);
         currentTier = tier;
+        if (spriteMode && spriteRenderer) {
+          spriteRenderer.setTier(tier);
+        }
       }
 
       // Milestones
@@ -3076,6 +3280,37 @@
 
     ipcRenderer.on("level-up", (e, data) => {
       celebrateLevelUp(data);
+    });
+
+    ipcRenderer.on("set-character", async (e, charInfo) => {
+      if (!charInfo || charInfo.id === "default") {
+        // Revert to CSS creature
+        spriteMode = false;
+        if (spriteRenderer) {
+          spriteRenderer.destroy();
+          spriteRenderer = null;
+        }
+        scene.className = scene.className.replace(/\s*sprite-mode/g, "");
+        // Re-apply current state with CSS creature
+        setState(currentState);
+      } else {
+        // Load sprite character
+        try {
+          spriteMode = true;
+          spriteRenderer = new SpriteRenderer(spriteCanvas);
+          await spriteRenderer.loadCharacter(charInfo.path);
+          spriteRenderer.setTier(currentTier);
+          // Re-apply current state to trigger sprite rendering
+          const stateToApply = currentState;
+          currentBaseState = null; // force re-application
+          setState(stateToApply);
+        } catch (err) {
+          console.error("Failed to load character:", err);
+          spriteMode = false;
+          if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
+          scene.className = scene.className.replace(/\s*sprite-mode/g, "");
+        }
+      }
     });
 
     startIdleCycle();

@@ -18,6 +18,10 @@ const PROGRESSION_FILE = path.join(
   app.getPath("userData"),
   "progression.json"
 );
+const CHARACTER_FILE = path.join(
+  app.getPath("userData"),
+  "selected-character.json"
+);
 
 // Ensure status file exists
 if (!fs.existsSync(STATUS_FILE)) fs.writeFileSync(STATUS_FILE, "idle");
@@ -259,6 +263,79 @@ const progression = {
   },
 };
 
+// ── Character System ─────────────────────────────────────────────────────────
+
+let selectedCharacterId = "default";
+
+function getCharacterDirs() {
+  const dirs = [];
+  // Built-in characters (in app directory or resources)
+  const builtIn = app.isPackaged
+    ? path.join(process.resourcesPath, "characters")
+    : path.join(__dirname, "characters");
+  if (fs.existsSync(builtIn)) dirs.push(builtIn);
+
+  // User-installed characters
+  const userDir = path.join(app.getPath("userData"), "characters");
+  if (fs.existsSync(userDir)) dirs.push(userDir);
+
+  return dirs;
+}
+
+function discoverCharacters() {
+  const characters = [];
+  for (const baseDir of getCharacterDirs()) {
+    let entries;
+    try { entries = fs.readdirSync(baseDir, { withFileTypes: true }); }
+    catch (e) { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const configPath = path.join(baseDir, entry.name, "character.json");
+      if (!fs.existsSync(configPath)) continue;
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        characters.push({
+          id: config.id || entry.name,
+          name: config.name || entry.name,
+          path: path.join(baseDir, entry.name),
+        });
+      } catch (e) { /* skip invalid */ }
+    }
+  }
+  return characters;
+}
+
+function loadSelectedCharacter() {
+  try {
+    if (fs.existsSync(CHARACTER_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CHARACTER_FILE, "utf-8"));
+      selectedCharacterId = data.id || "default";
+    }
+  } catch (e) { /* use default */ }
+}
+
+function saveSelectedCharacter(id) {
+  selectedCharacterId = id;
+  try {
+    fs.writeFileSync(CHARACTER_FILE, JSON.stringify({ id }, null, 2));
+  } catch (e) { /* ignore */ }
+}
+
+function applyCharacter(charInfo) {
+  if (!win) return;
+  if (!charInfo || charInfo.id === "default") {
+    win.webContents.send("set-character", { id: "default" });
+  } else {
+    // Convert path to file:// URL for fetch() in renderer
+    const charPath = charInfo.path.replace(/\\/g, "/");
+    win.webContents.send("set-character", {
+      id: charInfo.id,
+      name: charInfo.name,
+      path: charPath,
+    });
+  }
+}
+
 // ── Hook Setup ──────────────────────────────────────────────────────────────
 
 function getHookPath() {
@@ -409,6 +486,20 @@ function createWindow() {
   win.loadFile("pet.html");
   win.setIgnoreMouseEvents(false);
 
+  // Apply saved character once renderer is ready
+  win.webContents.on("did-finish-load", () => {
+    if (selectedCharacterId !== "default") {
+      const chars = discoverCharacters();
+      const selected = chars.find(c => c.id === selectedCharacterId);
+      if (selected) {
+        applyCharacter(selected);
+      } else {
+        // Character folder was deleted — revert to default
+        saveSelectedCharacter("default");
+      }
+    }
+  });
+
   // Watch status file for immediate reaction
   fs.watch(STATUS_FILE, () => {
     try {
@@ -508,6 +599,35 @@ function buildStatsSubmenu() {
   ];
 }
 
+function buildCharacterSubmenu(hooksActive) {
+  const characters = discoverCharacters();
+  const items = [
+    {
+      label: "Default (CSS Creature)",
+      type: "radio",
+      checked: selectedCharacterId === "default",
+      click: () => {
+        saveSelectedCharacter("default");
+        applyCharacter(null);
+        tray.setContextMenu(buildTrayMenu(hooksActive));
+      },
+    },
+  ];
+  for (const char of characters) {
+    items.push({
+      label: char.name,
+      type: "radio",
+      checked: selectedCharacterId === char.id,
+      click: () => {
+        saveSelectedCharacter(char.id);
+        applyCharacter(char);
+        tray.setContextMenu(buildTrayMenu(hooksActive));
+      },
+    });
+  }
+  return items;
+}
+
 function buildTrayMenu(hooksActive) {
   return Menu.buildFromTemplate([
     {
@@ -547,6 +667,10 @@ function buildTrayMenu(hooksActive) {
       label: "Stats",
       submenu: buildStatsSubmenu(),
     },
+    {
+      label: "Character",
+      submenu: buildCharacterSubmenu(hooksActive),
+    },
     { type: "separator" },
     {
       label: "Manual",
@@ -581,6 +705,7 @@ app.whenReady().then(() => {
 
   // Load progression data
   progression.load();
+  loadSelectedCharacter();
 
   // Listen for idle variant changes from the renderer
   ipcMain.on("idle-variant-change", (e, variant) => {

@@ -20,7 +20,17 @@
     "cooking": { "file": "cooking.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "hatching": { "file": "hatching.png", "frameCount": 145, "frameDuration": 42, "loop": false },
     "deleting": { "file": "deleting.png", "frameCount": 145, "frameDuration": 42, "loop": true },
-    "downloading": { "file": "downloading.png", "frameCount": 145, "frameDuration": 42, "loop": true }
+    "downloading": { "file": "downloading.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-vibing": { "file": "idle-vibing.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-sleepy": { "file": "idle-sleepy.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-coffee": { "file": "idle-coffee.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-stargazing": { "file": "idle-stargazing.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-stretching": { "file": "idle-stretching.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-dancing": { "file": "idle-dancing.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-butterfly": { "file": "idle-butterfly.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-juggling": { "file": "idle-juggling.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-rainbow": { "file": "idle-rainbow.png", "frameCount": 145, "frameDuration": 42, "loop": true },
+    "idle-meditation": { "file": "idle-meditation.png", "frameCount": 145, "frameDuration": 42, "loop": true }
   },
   "fallbackMap": {
     "thinking-eureka": "thinking",

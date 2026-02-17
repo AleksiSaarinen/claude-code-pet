@@ -230,40 +230,70 @@ async function removeBackground(sharpImg, bgColor, tolerance) {
   const w = info.width;
   const h = info.height;
 
-  // Flood-fill from edges — only remove bg-colored pixels connected to the border
+  // Gradient-aware flood fill from edges.
+  // Each pixel is compared to its parent (neighbor that queued it)
+  // with a per-step tolerance, so the fill follows smooth gradients
+  // but stops at hard edges (character outlines).
+  const stepTol = Math.min(tolerance, 30); // per-neighbor step limit
+  const removed = new Uint8Array(w * h);
   const visited = new Uint8Array(w * h);
+  // Queue stores [idx, parentIdx]
   const queue = [];
 
-  // Seed from all border pixels
+  // Seed from all border pixels — mark as bg unconditionally
   for (let x = 0; x < w; x++) {
-    queue.push(x + 0 * w);       // top row
-    queue.push(x + (h - 1) * w); // bottom row
+    const top = x;
+    const bot = x + (h - 1) * w;
+    if (!visited[top]) { visited[top] = 1; removed[top] = 1; queue.push(top, top); }
+    if (!visited[bot]) { visited[bot] = 1; removed[bot] = 1; queue.push(bot, bot); }
   }
   for (let y = 0; y < h; y++) {
-    queue.push(0 + y * w);       // left col
-    queue.push((w - 1) + y * w); // right col
+    const left = y * w;
+    const right = (w - 1) + y * w;
+    if (!visited[left]) { visited[left] = 1; removed[left] = 1; queue.push(left, left); }
+    if (!visited[right]) { visited[right] = 1; removed[right] = 1; queue.push(right, right); }
   }
 
-  while (queue.length > 0) {
-    const idx = queue.pop();
-    if (visited[idx]) continue;
-    visited[idx] = 1;
+  let qi = 0;
+  while (qi < queue.length) {
+    const idx = queue[qi++];
+    const parentIdx = queue[qi++];
 
     const px = idx * channels;
-    const r = pixels[px];
-    const g = pixels[px + 1];
-    const b = pixels[px + 2];
-    const dist = colorDistance(r, g, b, bgColor.r, bgColor.g, bgColor.b);
+    const ppx = parentIdx * channels;
 
-    if (dist < tolerance) {
-      pixels[px + 3] = 0; // make transparent
+    // Compare to parent (neighbor similarity — follows gradients)
+    const neighborDist = colorDistance(
+      pixels[px], pixels[px+1], pixels[px+2],
+      pixels[ppx], pixels[ppx+1], pixels[ppx+2]
+    );
+
+    // Also compare to original seed color (prevents drifting too far)
+    const seedDist = colorDistance(
+      pixels[px], pixels[px+1], pixels[px+2],
+      bgColor.r, bgColor.g, bgColor.b
+    );
+
+    // Accept if similar to neighbor AND not too far from seed
+    // OR if very close to seed color (original behavior)
+    if (neighborDist < stepTol && seedDist < tolerance * 3) {
+      removed[idx] = 1;
+      pixels[px + 3] = 0;
 
       const x = idx % w;
       const y = Math.floor(idx / w);
-      if (x > 0 && !visited[idx - 1]) queue.push(idx - 1);
-      if (x < w - 1 && !visited[idx + 1]) queue.push(idx + 1);
-      if (y > 0 && !visited[idx - w]) queue.push(idx - w);
-      if (y < h - 1 && !visited[idx + w]) queue.push(idx + w);
+      const neighbors = [];
+      if (x > 0) neighbors.push(idx - 1);
+      if (x < w - 1) neighbors.push(idx + 1);
+      if (y > 0) neighbors.push(idx - w);
+      if (y < h - 1) neighbors.push(idx + w);
+
+      for (const ni of neighbors) {
+        if (!visited[ni]) {
+          visited[ni] = 1;
+          queue.push(ni, idx);
+        }
+      }
     }
   }
 

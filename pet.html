@@ -71,6 +71,25 @@
     animation: prismatic-cycle 3s linear infinite;
   }
 
+  /* ---- VIDEO MODE ---- */
+  .video-renderer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 120px; height: 120px;
+    display: none;
+    z-index: 1;
+  }
+  .video-mode .video-renderer { display: block; }
+  .video-mode .sprite-canvas { display: none; }
+  .video-mode .antenna,
+  .video-mode .body,
+  .video-mode .eye,
+  .video-mode .mouth,
+  .video-mode .foot { display: none; }
+  .video-mode.tier-5 .video-renderer {
+    animation: prismatic-cycle 3s linear infinite;
+  }
+
   .body {
     position: absolute;
     left: 20px; top: 20px;
@@ -1523,6 +1542,7 @@
     <div class="status-label" id="statusLabel">idle</div>
     <div class="creature" id="creature">
       <canvas id="spriteCanvas" class="sprite-canvas" width="120" height="120"></canvas>
+      <video id="videoRenderer" class="video-renderer" width="240" height="240" muted playsinline></video>
       <div class="antenna"></div>
       <div class="body"></div>
       <div class="eye left"><div class="pupil"></div></div>
@@ -1562,7 +1582,9 @@
 
     // ── SPRITE SHEET RENDERING ─────────────────────────────────────
     const spriteCanvas = document.getElementById("spriteCanvas");
+    const videoElement = document.getElementById("videoRenderer");
     let spriteMode = false;
+    let videoMode = false;
     let spriteRenderer = null;
 
     class SpriteRenderer {
@@ -1705,6 +1727,107 @@
         this.images = {};
         this.config = null;
         this.currentFrame = 0;
+      }
+    }
+
+    class VideoRenderer {
+      constructor(video) {
+        this.video = video;
+        this.config = null;
+        this.basePath = "";
+        this.blobs = {};
+        this.currentState = "idle";
+        this.tierIndex = 0;
+      }
+
+      async loadCharacter(charPath) {
+        this.destroy();
+        let normalized = charPath.replace(/\\/g, "/").replace(/\/?$/, "/");
+        if (!normalized.startsWith("file://")) {
+          normalized = "file:///" + normalized.replace(/^\/+/, "");
+        }
+        this.basePath = normalized;
+
+        const configPath = this.basePath + "character.json";
+        const raw = await fetch(configPath).then(r => r.text());
+        this.config = JSON.parse(raw);
+
+        // Defaults
+        if (!this.config.fallbackMap) this.config.fallbackMap = {};
+        if (!this.config.states) this.config.states = {};
+        if (!this.config.tierStrategy) this.config.tierStrategy = "filter";
+        if (this.config.particlesEnabled === undefined) this.config.particlesEnabled = true;
+        if (this.config.accessoriesEnabled === undefined) this.config.accessoriesEnabled = true;
+
+        // Preload all .webm files as blob URLs
+        const loadPromises = [];
+        for (const [stateKey, stateConf] of Object.entries(this.config.states)) {
+          loadPromises.push(this._preloadVideo(stateKey, stateConf.file));
+        }
+        await Promise.allSettled(loadPromises);
+
+        this.setState("idle");
+      }
+
+      async _preloadVideo(stateKey, filename) {
+        try {
+          const resp = await fetch(this.basePath + filename);
+          if (!resp.ok) return;
+          const blob = await resp.blob();
+          this.blobs[stateKey] = URL.createObjectURL(blob);
+        } catch (e) {
+          // skip missing videos
+        }
+      }
+
+      resolveState(key) {
+        if (this.config.states[key] && this.blobs[key]) return key;
+        const visited = new Set();
+        let current = key;
+        while (this.config.fallbackMap[current] && !visited.has(current)) {
+          visited.add(current);
+          current = this.config.fallbackMap[current];
+          if (this.config.states[current] && this.blobs[current]) return current;
+        }
+        return this.blobs["idle"] ? "idle" : null;
+      }
+
+      setState(stateKey) {
+        const resolved = this.resolveState(stateKey);
+        if (!resolved) return;
+
+        this.currentState = resolved;
+        const stateConf = this.config.states[resolved];
+        const loop = stateConf.loop !== false;
+
+        this.video.src = this.blobs[resolved];
+        this.video.loop = loop;
+        this.video.currentTime = 0;
+        this.video.play().catch(() => {});
+      }
+
+      setTier(tierIndex) {
+        this.tierIndex = tierIndex;
+        if (this.config && this.config.tierStrategy === "filter") {
+          const filters = this.config.tierFilters || {};
+          const filterVal = filters[String(tierIndex)] || "none";
+          if (tierIndex !== 5) {
+            this.video.style.filter = filterVal;
+          } else {
+            this.video.style.filter = "";
+          }
+        }
+      }
+
+      destroy() {
+        this.video.pause();
+        this.video.removeAttribute("src");
+        this.video.load();
+        for (const url of Object.values(this.blobs)) {
+          URL.revokeObjectURL(url);
+        }
+        this.blobs = {};
+        this.config = null;
       }
     }
 
@@ -2858,17 +2981,18 @@
         ipcRenderer.send("idle-variant-change", "idle");
       }
 
-      const spriteClass = spriteMode ? " sprite-mode" : "";
-      scene.className = "scene state-" + variant + " tier-" + currentTier + spriteClass;
+      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
+      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass;
       label.textContent = config.label;
       currentState = variant;
 
-      if (spriteMode && spriteRenderer) {
+      if ((spriteMode || videoMode) && spriteRenderer) {
         spriteRenderer.setState(variant);
       }
 
-      const showAccessories = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
-      const showParticles = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
+      const customMode = spriteMode || videoMode;
+      const showAccessories = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
+      const showParticles = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
 
       if (showAccessories) updateAccessories(config);
       else accessoryLayer.innerHTML = "";
@@ -2944,17 +3068,18 @@
 
       ipcRenderer.send("activity-variant-change", currentActivityVariant);
 
-      const spriteClass = spriteMode ? " sprite-mode" : "";
-      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + spriteClass;
+      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
+      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + modeClass;
       label.textContent = config.label || effectiveState;
       currentState = effectiveState;
 
-      if (spriteMode && spriteRenderer) {
+      if ((spriteMode || videoMode) && spriteRenderer) {
         spriteRenderer.setState(effectiveState);
       }
 
-      const showAccessories = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
-      const showParticles = !spriteMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
+      const customMode = spriteMode || videoMode;
+      const showAccessories = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
+      const showParticles = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
 
       if (showAccessories) updateAccessories(config);
       else accessoryLayer.innerHTML = "";
@@ -3158,7 +3283,7 @@
         scene.classList.remove("tier-" + currentTier);
         scene.classList.add("tier-" + tier);
         currentTier = tier;
-        if (spriteMode && spriteRenderer) {
+        if ((spriteMode || videoMode) && spriteRenderer) {
           spriteRenderer.setTier(tier);
         }
       }
@@ -3286,29 +3411,54 @@
       if (!charInfo || charInfo.id === "default") {
         // Revert to CSS creature
         spriteMode = false;
+        videoMode = false;
         if (spriteRenderer) {
           spriteRenderer.destroy();
           spriteRenderer = null;
         }
-        scene.className = scene.className.replace(/\s*sprite-mode/g, "");
+        scene.className = scene.className.replace(/\s*(sprite-mode|video-mode)/g, "");
         // Re-apply current state with CSS creature
         setState(currentState);
       } else {
-        // Load sprite character
+        // Peek at renderMode from charInfo or character.json
+        let renderMode = charInfo.renderMode;
+        if (!renderMode) {
+          try {
+            let p = charInfo.path.replace(/\\/g, "/").replace(/\/?$/, "/");
+            if (!p.startsWith("file://")) p = "file:///" + p.replace(/^\/+/, "");
+            const raw = await fetch(p + "character.json").then(r => r.text());
+            renderMode = JSON.parse(raw).renderMode || "sprite";
+          } catch (_) {
+            renderMode = "sprite";
+          }
+        }
+
         try {
-          spriteMode = true;
-          spriteRenderer = new SpriteRenderer(spriteCanvas);
+          // Clean up previous renderer
+          if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
+
+          if (renderMode === "video") {
+            spriteMode = false;
+            videoMode = true;
+            spriteRenderer = new VideoRenderer(videoElement);
+          } else {
+            spriteMode = true;
+            videoMode = false;
+            spriteRenderer = new SpriteRenderer(spriteCanvas);
+          }
+
           await spriteRenderer.loadCharacter(charInfo.path);
           spriteRenderer.setTier(currentTier);
-          // Re-apply current state to trigger sprite rendering
+          // Re-apply current state to trigger rendering
           const stateToApply = currentState;
           currentBaseState = null; // force re-application
           setState(stateToApply);
         } catch (err) {
           console.error("Failed to load character:", err);
           spriteMode = false;
+          videoMode = false;
           if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
-          scene.className = scene.className.replace(/\s*sprite-mode/g, "");
+          scene.className = scene.className.replace(/\s*(sprite-mode|video-mode)/g, "");
         }
       }
     });

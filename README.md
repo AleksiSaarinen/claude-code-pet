@@ -26,6 +26,10 @@ Built with Electron. Runs on Windows.
 
 **Rare variants** — Higher tiers unlock rare activity animations like `coding-flow`, `thinking-eureka`, `debugging-detective`, `idle-dancing`, and more.
 
+**Achievements** — 22 unlockable badges across four categories: coding activity milestones (sessions, time), skill levels, git stats (commits, merges, branches), and fun/rare events (night owl, marathon sessions). Achievements pop up as gold-bordered toasts and are browsable in the tray menu.
+
+**Custom characters** — Swap the default CSS creature for custom sprite sheet or video-based characters. Built-in characters live in `characters/`, user-installed ones go in `%APPDATA%/claude-code-pet/characters/`. Switch via the tray menu.
+
 ## Install
 
 ```bash
@@ -76,12 +80,13 @@ npm run set-error
 ## Project structure
 
 ```
-├── main.js          Electron main process, hook management, progression
-├── pet.html         UI, animations, particle systems, progression display
+├── main.js          Electron main process, hooks, progression, achievements
+├── pet.html         UI, animations, particle systems, toasts
 ├── hook.js          Claude Code hook handler, tool classification
 ├── set-status.js    CLI helper to set pet status manually
 ├── watcher.js       Alternative watcher for Claude Code output
 ├── icon.png         App and tray icon
+├── characters/      Custom sprite/video characters
 └── package.json     Config, scripts, build settings
 ```
 

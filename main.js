@@ -100,6 +100,71 @@ const SKILL_ACTIVITIES = {
 
 const TIER_NAMES = ["Hatchling", "Apprentice", "Adept", "Expert", "Master", "Legendary"];
 
+// ── Achievement Definitions ──────────────────────────────────────────────────
+
+const BASE_STATES = [
+  "idle", "coding", "thinking", "success", "error", "searching", "reading",
+  "debugging", "installing", "testing", "deploying", "cooking", "hatching",
+  "deleting", "downloading",
+];
+
+const ACHIEVEMENT_DEFS = [
+  // Coding Activity
+  { id: "first_session", name: "First Steps", icon: "\u{1F476}", description: "Complete your first session", category: "activity",
+    check: (d) => d.sessions >= 1 },
+  { id: "sessions_10", name: "Regular", icon: "\u{1F4C5}", description: "Complete 10 sessions", category: "activity",
+    check: (d) => d.sessions >= 10 },
+  { id: "sessions_50", name: "Dedicated", icon: "\u{1F3C6}", description: "Complete 50 sessions", category: "activity",
+    check: (d) => d.sessions >= 50 },
+  { id: "time_1h", name: "Hour of Power", icon: "\u{23F1}\uFE0F", description: "1 hour active", category: "activity",
+    check: (d) => d.totalTimeMs >= 3600000 },
+  { id: "time_10h", name: "Tenacious", icon: "\u{1F4AA}", description: "10 hours active", category: "activity",
+    check: (d) => d.totalTimeMs >= 36000000 },
+  { id: "time_100h", name: "Centurion", icon: "\u{1F451}", description: "100 hours active", category: "activity",
+    check: (d) => d.totalTimeMs >= 360000000 },
+  { id: "all_states", name: "Jack of All Trades", icon: "\u{1F0CF}", description: "Trigger all 15 base states", category: "activity",
+    check: (d) => {
+      const triggered = d.achievements?.tracking?.statesTriggered || [];
+      return BASE_STATES.every(s => triggered.includes(s));
+    }},
+
+  // Skill Milestones
+  { id: "first_skill_5", name: "Apprentice", icon: "\u{1F393}", description: "Any skill reaches level 5", category: "skills",
+    check: (d) => Object.values(d.skills).some(s => s.level >= 5) },
+  { id: "first_skill_10", name: "Specialist", icon: "\u{1F3AF}", description: "Any skill reaches level 10", category: "skills",
+    check: (d) => Object.values(d.skills).some(s => s.level >= 10) },
+  { id: "skill_trio", name: "Triple Threat", icon: "\u{1F945}", description: "3 skills at level 5+", category: "skills",
+    check: (d) => Object.values(d.skills).filter(s => s.level >= 5).length >= 3 },
+  { id: "coding_master", name: "Code Machine", icon: "\u{1F916}", description: "Coding skill level 15", category: "skills",
+    check: (d) => (d.skills.coding?.level || 0) >= 15 },
+  { id: "polyglot", name: "Polyglot", icon: "\u{1F30D}", description: "8 skills at level 3+", category: "skills",
+    check: (d) => Object.values(d.skills).filter(s => s.level >= 3).length >= 8 },
+  { id: "legendary_pet", name: "Legendary", icon: "\u{2B50}", description: "Reach pet level 25", category: "skills",
+    check: (d) => d.level >= 25 },
+
+  // Git Milestones
+  { id: "first_commit", name: "First Commit", icon: "\u{1F4DD}", description: "Make your first commit", category: "git",
+    check: (d) => (d.achievements?.gitStats?.totalCommits || 0) >= 1 },
+  { id: "commits_50", name: "Prolific", icon: "\u{1F4DA}", description: "50 commits", category: "git",
+    check: (d) => (d.achievements?.gitStats?.totalCommits || 0) >= 50 },
+  { id: "commits_200", name: "Commit Machine", icon: "\u{1F3ED}", description: "200 commits", category: "git",
+    check: (d) => (d.achievements?.gitStats?.totalCommits || 0) >= 200 },
+  { id: "first_merge", name: "Merger", icon: "\u{1F91D}", description: "Make a merge commit", category: "git",
+    check: (d) => (d.achievements?.gitStats?.merges || 0) >= 1 },
+  { id: "branches_3", name: "Branch Manager", icon: "\u{1F333}", description: "Work on 3+ branches", category: "git",
+    check: (d) => (d.achievements?.gitStats?.branchesSeen?.length || 0) >= 3 },
+
+  // Fun/Rare
+  { id: "midnight_coder", name: "Night Owl", icon: "\u{1F989}", description: "Code between 12am-4am", category: "fun",
+    check: () => { const h = new Date().getHours(); return h >= 0 && h < 4; }},
+  { id: "early_bird", name: "Early Bird", icon: "\u{1F426}", description: "Code between 5am-7am", category: "fun",
+    check: () => { const h = new Date().getHours(); return h >= 5 && h < 7; }},
+  { id: "marathon", name: "Marathon", icon: "\u{1F3C3}", description: "2+ hour continuous session", category: "fun",
+    check: (d) => (d.achievements?.tracking?.sessionActiveStreak || 0) >= 7200 },
+  { id: "error_streak", name: "Resilient", icon: "\u{1F4A5}", description: "5 errors in one session, keep going", category: "fun",
+    check: (d) => (d.achievements?.tracking?.sessionErrorCount || 0) >= 5 },
+];
+
 function skillXpNeeded(level) {
   return Math.floor(100 * level * 1.2);
 }
@@ -182,6 +247,19 @@ const progression = {
       }
     }
 
+    // Migrate: ensure achievements structure exists
+    if (!this.data.achievements) {
+      this.data.achievements = {
+        earned: {},
+        gitStats: { totalCommits: 0, merges: 0, branchesSeen: [], lastPolledAt: null },
+        tracking: { statesTriggered: [], sessionErrorCount: 0, sessionActiveStreak: 0, lastActiveTime: 0 },
+      };
+    }
+    // Reset per-session trackers
+    this.data.achievements.tracking.sessionErrorCount = 0;
+    this.data.achievements.tracking.sessionActiveStreak = 0;
+    this.data.achievements.tracking.lastActiveTime = 0;
+
     this.data.sessions++;
     this.dirty = true;
     // Debounced auto-save every 10s
@@ -244,6 +322,19 @@ const progression = {
     for (let i = 1; i < d.level; i++) prevCum += petXpNeeded(i);
     const currentLevelXP = d.totalXP - prevCum;
     const nextLevelXP = petXpNeeded(d.level);
+    // Build achievements summary for renderer
+    const earned = d.achievements ? d.achievements.earned : {};
+    const earnedIds = Object.keys(earned);
+    const recentAchievements = ACHIEVEMENT_DEFS
+      .filter(def => earned[def.id])
+      .sort((a, b) => (earned[b.id].unlockedAt || "").localeCompare(earned[a.id].unlockedAt || ""))
+      .slice(0, 3)
+      .map(def => ({ id: def.id, name: def.name, icon: def.icon }));
+    const nextAchievements = ACHIEVEMENT_DEFS
+      .filter(def => !earned[def.id])
+      .slice(0, 3)
+      .map(def => ({ id: def.id, name: def.name, icon: def.icon, description: def.description }));
+
     return {
       totalXP: d.totalXP,
       level: d.level,
@@ -254,7 +345,40 @@ const progression = {
       skills: d.skills,
       totalTimeMs: d.totalTimeMs,
       sessions: d.sessions,
+      achievementsEarned: earnedIds.length,
+      achievementsTotal: ACHIEVEMENT_DEFS.length,
+      recentAchievements,
+      nextAchievements,
     };
+  },
+
+  checkAchievements() {
+    const newlyUnlocked = [];
+    for (const def of ACHIEVEMENT_DEFS) {
+      if (this.data.achievements.earned[def.id]) continue;
+      try {
+        if (def.check(this.data)) {
+          this.data.achievements.earned[def.id] = { unlockedAt: new Date().toISOString() };
+          this.dirty = true;
+          newlyUnlocked.push(def);
+        }
+      } catch (e) { /* skip broken check */ }
+    }
+    return newlyUnlocked;
+  },
+
+  trackStateChange(status) {
+    const tracking = this.data.achievements.tracking;
+    // Track unique base states triggered
+    if (BASE_STATES.includes(status) && !tracking.statesTriggered.includes(status)) {
+      tracking.statesTriggered.push(status);
+      this.dirty = true;
+    }
+    // Count errors this session
+    if (status === "error") {
+      tracking.sessionErrorCount++;
+      this.dirty = true;
+    }
   },
 
   shutdown() {
@@ -262,6 +386,30 @@ const progression = {
     this.save();
   },
 };
+
+// ── Git Stats Polling ────────────────────────────────────────────────────────
+
+function pollGitStats() {
+  if (!progression.data) return;
+  const { execSync } = require("child_process");
+  const gs = progression.data.achievements.gitStats;
+  try {
+    const commits = parseInt(execSync("git rev-list --count --all", { timeout: 5000, encoding: "utf-8" }).trim(), 10);
+    if (!isNaN(commits)) gs.totalCommits = commits;
+  } catch (e) { /* not a git repo or git not available */ }
+  try {
+    const merges = parseInt(execSync("git rev-list --count --all --merges", { timeout: 5000, encoding: "utf-8" }).trim(), 10);
+    if (!isNaN(merges)) gs.merges = merges;
+  } catch (e) { /* ignore */ }
+  try {
+    const branch = execSync("git branch --show-current", { timeout: 5000, encoding: "utf-8" }).trim();
+    if (branch && !gs.branchesSeen.includes(branch)) {
+      gs.branchesSeen.push(branch);
+    }
+  } catch (e) { /* ignore */ }
+  gs.lastPolledAt = new Date().toISOString();
+  progression.dirty = true;
+}
 
 // ── Character System ─────────────────────────────────────────────────────────
 
@@ -508,6 +656,7 @@ function createWindow() {
       if (status !== currentStatus) {
         currentStatus = status;
         lastChangeTime = Date.now();
+        progression.trackStateChange(status);
         win.webContents.send("status-change", status);
         win.webContents.send("status-update", {
           status: currentStatus,
@@ -527,6 +676,7 @@ function createWindow() {
       if (status !== currentStatus) {
         currentStatus = status;
         lastChangeTime = Date.now();
+        progression.trackStateChange(status);
         win.webContents.send("status-change", status);
       }
 
@@ -540,6 +690,26 @@ function createWindow() {
         tickActivity = currentStatus;
       }
       progression.tick(tickActivity);
+
+      // Marathon tracking: increment streak when active, reset if idle 5+ min
+      const tracking = progression.data.achievements.tracking;
+      const isActive = currentStatus !== "idle" && currentStatus !== "success" && currentStatus !== "error";
+      if (isActive) {
+        tracking.sessionActiveStreak++;
+        tracking.lastActiveTime = Date.now();
+      } else if (tracking.lastActiveTime > 0 && Date.now() - tracking.lastActiveTime > 300000) {
+        tracking.sessionActiveStreak = 0;
+      }
+
+      // Check achievements (skip toasts if bulk unlock on migration)
+      const newAchievements = progression.checkAchievements();
+      if (newAchievements.length <= 3) {
+        for (const ach of newAchievements) {
+          win.webContents.send("achievement-unlocked", {
+            id: ach.id, name: ach.name, icon: ach.icon, description: ach.description,
+          });
+        }
+      }
 
       // Send progression update every tick so UI stays in sync
       win.webContents.send("status-update", {
@@ -629,6 +799,32 @@ function buildCharacterSubmenu(hooksActive) {
   return items;
 }
 
+function buildAchievementsSubmenu() {
+  const earned = progression.data.achievements.earned;
+  const earnedCount = Object.keys(earned).length;
+  const total = ACHIEVEMENT_DEFS.length;
+  const categories = { activity: "Coding Activity", skills: "Skill Milestones", git: "Git Milestones", fun: "Fun / Rare" };
+  const items = [
+    { label: `${earnedCount} / ${total} Unlocked`, enabled: false },
+    { type: "separator" },
+  ];
+  for (const [catKey, catLabel] of Object.entries(categories)) {
+    items.push({ label: catLabel, enabled: false });
+    const defs = ACHIEVEMENT_DEFS.filter(d => d.category === catKey);
+    for (const def of defs) {
+      const isEarned = !!earned[def.id];
+      items.push({
+        label: isEarned ? `${def.icon} ${def.name}` : `    ${def.name}`,
+        type: "checkbox",
+        checked: isEarned,
+        enabled: false,
+      });
+    }
+    items.push({ type: "separator" });
+  }
+  return items;
+}
+
 function buildTrayMenu(hooksActive) {
   return Menu.buildFromTemplate([
     {
@@ -667,6 +863,10 @@ function buildTrayMenu(hooksActive) {
     {
       label: "Stats",
       submenu: buildStatsSubmenu(),
+    },
+    {
+      label: "Achievements",
+      submenu: buildAchievementsSubmenu(),
     },
     {
       label: "Character",
@@ -738,6 +938,10 @@ app.whenReady().then(() => {
   setInterval(() => {
     try { tray.setContextMenu(buildTrayMenu(hooksActive)); } catch (e) { /* ignore */ }
   }, 15000);
+
+  // Git stats polling — initial poll after 5s, then every 60s
+  setTimeout(pollGitStats, 5000);
+  setInterval(pollGitStats, 60000);
 });
 
 function writeStatus(s) {

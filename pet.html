@@ -20,7 +20,6 @@
     align-items: center;
     justify-content: flex-end;
     position: relative;
-    -webkit-app-region: no-drag;
   }
 
   .status-label {
@@ -43,6 +42,7 @@
     width: 120px;
     height: 120px;
     transition: filter 0.3s;
+    background: rgba(0,0,0,0.01);
   }
 
   /* ---- SPRITE SHEET MODE ---- */
@@ -253,6 +253,53 @@
     color: #fff;
   }
 
+  /* ---- CHARACTER SWITCH BUTTON (hover) ---- */
+  .char-switch-btn {
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    border: 1.5px solid rgba(255,255,255,0.3);
+    color: #fff;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    z-index: 60;
+    -webkit-app-region: no-drag;
+  }
+  .char-switch-btn:hover { opacity: 1; }
+
+  .char-picker {
+    position: absolute;
+    top: 28px; right: 4px;
+    min-width: 110px;
+    background: rgba(20,20,20,0.92);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 4px 0;
+    z-index: 70;
+    display: none;
+    -webkit-app-region: no-drag;
+    backdrop-filter: blur(8px);
+  }
+  .char-picker.open { display: block; }
+  .char-picker-item {
+    padding: 5px 12px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 10px;
+    color: rgba(255,255,255,0.8);
+    cursor: pointer;
+    transition: background 0.12s;
+    white-space: nowrap;
+  }
+  .char-picker-item:hover { background: rgba(255,255,255,0.12); }
+  .char-picker-item.active { color: #ffd700; font-weight: bold; }
+
   /* ---- SKILL LABEL + XP BAR + LEVEL BADGE ---- */
   .skill-label {
     font-family: 'Segoe UI', sans-serif;
@@ -456,6 +503,630 @@
     opacity: 0;
     pointer-events: none;
     line-height: 1;
+  }
+
+  /* ── CSS CAT CHARACTER ─────────────────────────────────────────── */
+
+  /* Hide cat parts by default */
+  .cat-ear, .cat-head, .cat-eye, .cat-nose, .cat-mouth,
+  .cat-whisker, .cat-tail, .cat-paw { display: none; }
+
+  /* Show cat parts, hide default creature parts when css-cat active */
+  .css-cat .cat-ear, .css-cat .cat-head, .css-cat .cat-eye,
+  .css-cat .cat-nose, .css-cat .cat-mouth, .css-cat .cat-whisker,
+  .css-cat .cat-tail, .css-cat .cat-paw { display: block; }
+  .css-cat .antenna, .css-cat .body, .css-cat .eye,
+  .css-cat .mouth, .css-cat .foot { display: none !important; }
+  .css-cat .sprite-canvas, .css-cat .video-renderer { display: none !important; }
+
+  /* Cat head/body — round face */
+  .cat-head {
+    position: absolute;
+    left: 15px; top: 22px;
+    width: 90px; height: 80px;
+    background: radial-gradient(ellipse at 40% 35%, #b0b0b0, #8a8a8a);
+    border-radius: 50% 50% 48% 48% / 45% 45% 55% 55%;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25), inset 0 -4px 10px rgba(0,0,0,0.08);
+    z-index: 2;
+    transition: transform 0.3s, background 0.4s;
+  }
+
+  /* Ears — CSS triangles */
+  .cat-ear {
+    position: absolute;
+    width: 0; height: 0;
+    z-index: 3;
+    transition: transform 0.3s;
+  }
+  .cat-ear.left {
+    left: 20px; top: 6px;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-bottom: 22px solid #8a8a8a;
+    transform: rotate(-8deg);
+  }
+  .cat-ear.right {
+    right: 20px; top: 6px;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-bottom: 22px solid #8a8a8a;
+    transform: rotate(8deg);
+  }
+  /* Pink inner ear */
+  .cat-ear::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+  }
+  .cat-ear.left::after {
+    left: -6px;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-bottom: 14px solid #e8a0b0;
+  }
+  .cat-ear.right::after {
+    left: -6px;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-bottom: 14px solid #e8a0b0;
+  }
+
+  /* Cat eyes — almond shape */
+  .cat-eye {
+    position: absolute;
+    width: 20px; height: 16px;
+    background: radial-gradient(ellipse, #c8d86a, #8fb03b);
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    top: 42px;
+    z-index: 3;
+    overflow: hidden;
+    box-shadow: 0 0 3px rgba(0,0,0,0.2);
+    transition: transform 0.3s, height 0.2s;
+  }
+  .cat-eye.left { left: 33px; }
+  .cat-eye.right { left: 67px; }
+
+  /* Vertical slit pupil */
+  .cat-pupil {
+    width: 4px; height: 12px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    position: absolute;
+    top: 2px; left: 8px;
+    transition: width 0.3s, height 0.2s, transform 0.2s;
+  }
+
+  /* Cat nose — small pink triangle */
+  .cat-nose {
+    position: absolute;
+    top: 58px; left: 55px;
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #e8a0b0;
+    z-index: 3;
+  }
+
+  /* Cat mouth — "w" shape using two arcs */
+  .cat-mouth {
+    position: absolute;
+    top: 63px; left: 49px;
+    width: 22px; height: 8px;
+    z-index: 3;
+    transition: transform 0.3s;
+  }
+  .cat-mouth::before, .cat-mouth::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 11px; height: 6px;
+    border-bottom: 2px solid #5a4a4a;
+    border-radius: 0 0 50% 50%;
+  }
+  .cat-mouth::before { left: 0; }
+  .cat-mouth::after { left: 11px; }
+
+  /* Whiskers — left whiskers extend left, right extend right */
+  .cat-whisker {
+    position: absolute;
+    width: 26px; height: 1.5px;
+    background: rgba(200,200,200,0.7);
+    z-index: 4;
+    transition: transform 0.3s;
+  }
+  .cat-whisker.left { transform-origin: right center; }
+  .cat-whisker.right { transform-origin: left center; }
+  .cat-whisker.left.top { left: 0; top: 58px; transform: rotate(10deg); }
+  .cat-whisker.left.mid { left: 0; top: 63px; transform: rotate(0deg); }
+  .cat-whisker.left.bot { left: 0; top: 68px; transform: rotate(-10deg); }
+  .cat-whisker.right.top { right: -6px; top: 58px; transform: rotate(-10deg); }
+  .cat-whisker.right.mid { right: -8px; top: 63px; transform: rotate(0deg); }
+  .cat-whisker.right.bot { right: -6px; top: 68px; transform: rotate(10deg); }
+
+  /* Cat tail — curved J-shape, overlaps bottom-right of body */
+  .cat-tail {
+    position: absolute;
+    top: 80px; right: 4px;
+    width: 0; height: 0;
+    border: none;
+    background: none;
+    z-index: 1;
+    transition: transform 0.4s;
+    transform-origin: top left;
+    transform: rotate(0deg);
+  }
+  /* Tail arm — horizontal bar extending right from body */
+  .cat-tail::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 30px; height: 7px;
+    background: #8a8a8a;
+    border-radius: 3px 4px 4px 3px;
+  }
+  /* Tail tip — curves upward */
+  .cat-tail::after {
+    content: '';
+    position: absolute;
+    top: -18px; left: 24px;
+    width: 7px; height: 22px;
+    background: #8a8a8a;
+    border-radius: 4px 4px 0 0;
+  }
+
+  /* Cat paws */
+  .cat-paw {
+    position: absolute;
+    bottom: 5px;
+    width: 20px; height: 12px;
+    background: #7a7a7a;
+    border-radius: 50%;
+    z-index: 2;
+  }
+  .cat-paw.left { left: 30px; }
+  .cat-paw.right { left: 68px; }
+
+  /* ── CSS CAT STATE ANIMATIONS ────────────────────────────────────── */
+
+  /* CAT IDLE — breathing, tail sway, blink */
+  .css-cat.state-idle .cat-head { animation: cat-breathe 3s ease-in-out infinite; }
+  .css-cat.state-idle .cat-tail { animation: cat-tail-sway 2.5s ease-in-out infinite; }
+  .css-cat.state-idle .cat-eye { animation: cat-blink 4s ease-in-out infinite; }
+  .css-cat.state-idle .cat-ear { animation: cat-ear-twitch 5s ease-in-out infinite; }
+  .css-cat.state-idle .cat-whisker { animation: cat-whisker-twitch 4s ease-in-out infinite; }
+
+  @keyframes cat-breathe {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-2px) scale(1.02); }
+  }
+  @keyframes cat-tail-sway {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-15deg); }
+  }
+  @keyframes cat-blink {
+    0%, 42%, 46%, 100% { height: 16px; }
+    44% { height: 2px; }
+  }
+  @keyframes cat-slow-blink {
+    0%, 92%, 96%, 100% { height: 16px; }
+    94% { height: 2px; }
+  }
+  @keyframes cat-ear-twitch {
+    0%, 85%, 90%, 100% { transform: rotate(var(--ear-rot, 0deg)); }
+    87% { transform: rotate(calc(var(--ear-rot, 0deg) + 5deg)); }
+  }
+  .css-cat .cat-ear.left { --ear-rot: -8deg; }
+  .css-cat .cat-ear.right { --ear-rot: 8deg; }
+  @keyframes cat-whisker-twitch {
+    0%, 80%, 85%, 100% { transform: rotate(var(--w-rot, 0deg)); }
+    82% { transform: rotate(calc(var(--w-rot, 0deg) + 3deg)); }
+  }
+  .css-cat .cat-whisker.left.top { --w-rot: 10deg; }
+  .css-cat .cat-whisker.left.mid { --w-rot: 0deg; }
+  .css-cat .cat-whisker.left.bot { --w-rot: -10deg; }
+  .css-cat .cat-whisker.right.top { --w-rot: -10deg; }
+  .css-cat .cat-whisker.right.mid { --w-rot: 0deg; }
+  .css-cat .cat-whisker.right.bot { --w-rot: 10deg; }
+
+  /* CAT IDLE VARIANTS — reuse base idle + slight tweaks */
+  .css-cat[class*="state-idle-"] .cat-head { animation: cat-breathe 3s ease-in-out infinite; }
+  .css-cat[class*="state-idle-"] .cat-tail { animation: cat-tail-sway 2.5s ease-in-out infinite; }
+  .css-cat[class*="state-idle-"] .cat-eye { animation: cat-blink 4s ease-in-out infinite; }
+  .css-cat[class*="state-idle-"] .cat-whisker { animation: cat-whisker-twitch 4s ease-in-out infinite; }
+  .css-cat.state-idle-sleepy .cat-eye { animation: cat-sleepy-eyes 3s ease-in-out infinite; }
+  .css-cat.state-idle-sleepy .cat-tail { animation: none; transform: rotate(-10deg); }
+  .css-cat.state-idle-dancing .cat-head { animation: cat-dance 0.6s ease-in-out infinite; }
+  .css-cat.state-idle-dancing .cat-tail { animation: cat-tail-wag-fast 0.4s ease-in-out infinite; }
+  .css-cat.state-idle-dancing .cat-paw { animation: cat-paw-dance 0.6s ease-in-out infinite alternate; }
+  .css-cat.state-idle-stretching .cat-head { animation: cat-stretch 2s ease-in-out infinite; }
+  .css-cat.state-idle-rainbow .cat-head { animation: cat-rainbow-body 3s linear infinite; }
+
+  @keyframes cat-sleepy-eyes {
+    0%, 100% { height: 6px; }
+    50% { height: 4px; }
+  }
+  @keyframes cat-dance {
+    0%, 100% { transform: translateX(-3px) rotate(-3deg); }
+    50% { transform: translateX(3px) rotate(3deg); }
+  }
+  @keyframes cat-paw-dance {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-4px); }
+  }
+  @keyframes cat-stretch {
+    0%, 100% { transform: translateY(0) scaleX(1) scaleY(1); }
+    50% { transform: translateY(-4px) scaleX(0.95) scaleY(1.08); }
+  }
+  @keyframes cat-rainbow-body {
+    0% { background: radial-gradient(ellipse at 40% 35%, #ffb0b0, #ff8a8a); }
+    16% { background: radial-gradient(ellipse at 40% 35%, #ffe0a0, #ffcc70); }
+    33% { background: radial-gradient(ellipse at 40% 35%, #c0f0a0, #90d870); }
+    50% { background: radial-gradient(ellipse at 40% 35%, #a0d0f0, #70b0e0); }
+    66% { background: radial-gradient(ellipse at 40% 35%, #c0a0f0, #a070e0); }
+    83% { background: radial-gradient(ellipse at 40% 35%, #f0a0d0, #e070b0); }
+    100% { background: radial-gradient(ellipse at 40% 35%, #ffb0b0, #ff8a8a); }
+  }
+
+  /* CAT CODING — quick head bob, tail tip twitches, focused slits */
+  .css-cat.state-coding .cat-head { animation: cat-code-bob 0.35s ease-in-out infinite; }
+  .css-cat.state-coding .cat-tail { animation: cat-tail-twitch 0.5s ease-in-out infinite; }
+  .css-cat.state-coding .cat-pupil { width: 3px; }
+  .css-cat.state-coding .cat-paw { animation: cat-code-paws 0.2s ease-in-out infinite alternate; }
+  .css-cat.state-coding .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; }
+
+  @keyframes cat-code-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  @keyframes cat-tail-twitch {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-5deg); }
+  }
+  @keyframes cat-code-paws {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-2px); }
+  }
+
+  /* Coding variants */
+  .css-cat.state-coding-flow .cat-head { animation: cat-code-bob 0.3s ease-in-out infinite; }
+  .css-cat.state-coding-flow .cat-tail { animation: cat-tail-wag-fast 0.3s ease-in-out infinite; }
+  .css-cat.state-coding-flow .cat-pupil { width: 2px; }
+  .css-cat.state-coding-flow .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; box-shadow: 0 0 6px rgba(140,200,60,0.5); }
+  .css-cat.state-coding-hacking .cat-head { animation: cat-code-bob 0.25s ease-in-out infinite; }
+  .css-cat.state-coding-hacking .cat-pupil { width: 2px; }
+  .css-cat.state-coding-hacking .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; box-shadow: 0 0 6px rgba(0,255,100,0.4); }
+
+  /* CAT THINKING — head tilt, pupils dilate, tail curls */
+  .css-cat.state-thinking .cat-head { animation: cat-think-tilt 2.5s ease-in-out infinite; }
+  .css-cat.state-thinking .cat-pupil { width: 7px; border-radius: 50%; }
+  .css-cat.state-thinking .cat-tail { animation: cat-tail-curl 3s ease-in-out infinite; }
+  .css-cat.state-thinking .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  @keyframes cat-think-tilt {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(5deg) translateX(2px); }
+  }
+  @keyframes cat-tail-curl {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-25deg); }
+  }
+
+  /* Thinking variants — all use base thinking + mild tweaks */
+  .css-cat[class*="state-thinking-"] .cat-head { animation: cat-think-tilt 2.5s ease-in-out infinite; }
+  .css-cat[class*="state-thinking-"] .cat-pupil { width: 7px; border-radius: 50%; }
+  .css-cat[class*="state-thinking-"] .cat-tail { animation: cat-tail-curl 3s ease-in-out infinite; }
+  .css-cat[class*="state-thinking-"] .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  /* CAT SUCCESS — happy squint, tail up wagging, ears perked */
+  .css-cat.state-success .cat-head { animation: cat-success-bounce 0.5s ease-in-out infinite; }
+  .css-cat.state-success .cat-eye { height: 8px; border-radius: 50%; animation: none; }
+  .css-cat.state-success .cat-pupil { display: none; }
+  .css-cat.state-success .cat-tail { animation: cat-tail-wag-fast 0.3s ease-in-out infinite; transform-origin: bottom center; }
+  .css-cat.state-success .cat-ear.left { transform: rotate(-12deg); }
+  .css-cat.state-success .cat-ear.right { transform: rotate(12deg); }
+  .css-cat.state-success .cat-mouth { top: 61px; }
+  .css-cat.state-success .cat-mouth::before,
+  .css-cat.state-success .cat-mouth::after { border-bottom-color: #5a4a4a; border-radius: 0 0 50% 50%; }
+
+  @keyframes cat-success-bounce {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-6px) scale(1.04); }
+  }
+  @keyframes cat-tail-wag-fast {
+    0%, 100% { transform: rotate(5deg); }
+    50% { transform: rotate(-20deg); }
+  }
+
+  /* CAT ERROR — ears flatten, wide eyes, tail puffs straight */
+  .css-cat.state-error .cat-head { animation: cat-error-shake 0.3s ease-in-out infinite; }
+  .css-cat.state-error .cat-eye { height: 20px; width: 22px; animation: none; }
+  .css-cat.state-error .cat-pupil { width: 6px; height: 6px; border-radius: 50%; top: 6px; }
+  .css-cat.state-error .cat-ear.left { transform: rotate(15deg) translateY(4px); }
+  .css-cat.state-error .cat-ear.right { transform: rotate(-15deg) translateY(4px); }
+  .css-cat.state-error .cat-tail { transform: rotate(10deg); animation: cat-tail-puff 0.4s ease-in-out infinite; }
+  .css-cat.state-error .cat-whisker { animation: cat-whisker-bristle 0.3s ease-in-out infinite; }
+  .css-cat.state-error .cat-mouth::before,
+  .css-cat.state-error .cat-mouth::after { border-bottom: none; border-top: 2px solid #5a4a4a; border-radius: 50% 50% 0 0; }
+
+  @keyframes cat-error-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+  }
+  @keyframes cat-tail-puff {
+    0%, 100% { transform: rotate(10deg); }
+    50% { transform: rotate(5deg); }
+  }
+  @keyframes cat-whisker-bristle {
+    0%, 100% { transform: rotate(var(--w-rot, 0deg)); }
+    50% { transform: rotate(calc(var(--w-rot, 0deg) + 8deg)); }
+  }
+
+  /* CAT SEARCHING — eyes scan side to side, ears rotate */
+  .css-cat.state-searching .cat-head { animation: cat-search-peer 1.2s ease-in-out infinite; }
+  .css-cat.state-searching .cat-pupil { animation: cat-search-scan 1.2s ease-in-out infinite; }
+  .css-cat.state-searching .cat-ear { animation: cat-ear-listen 1.5s ease-in-out infinite; }
+  .css-cat.state-searching .cat-tail { transform: rotate(-5deg); animation: none; }
+  .css-cat.state-searching .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  @keyframes cat-search-peer {
+    0%, 100% { transform: translateX(0); }
+    30% { transform: translateX(-4px); }
+    70% { transform: translateX(4px); }
+  }
+  @keyframes cat-search-scan {
+    0%, 100% { transform: translateX(0); }
+    30% { transform: translateX(-3px); }
+    70% { transform: translateX(3px); }
+  }
+  @keyframes cat-ear-listen {
+    0%, 100% { transform: rotate(var(--ear-rot, 0deg)); }
+    50% { transform: rotate(calc(var(--ear-rot, 0deg) + 12deg)); }
+  }
+
+  /* Searching variants */
+  .css-cat.state-searching-treasure .cat-head { animation: cat-search-peer 1s ease-in-out infinite; }
+  .css-cat.state-searching-treasure .cat-pupil { animation: cat-search-scan 1s ease-in-out infinite; width: 6px; border-radius: 50%; }
+  .css-cat.state-searching-treasure .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+  .css-cat.state-searching-deep .cat-head { animation: cat-search-peer 1.5s ease-in-out infinite; }
+  .css-cat.state-searching-deep .cat-pupil { animation: cat-search-scan 1.5s ease-in-out infinite; }
+  .css-cat.state-searching-deep .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; }
+
+  /* CAT READING — eyes follow text, relaxed */
+  .css-cat.state-reading .cat-head { animation: cat-read-lean 3s ease-in-out infinite; }
+  .css-cat.state-reading .cat-pupil { animation: cat-read-eyes 2.5s steps(3) infinite; }
+  .css-cat.state-reading .cat-tail { transform: rotate(-10deg); animation: none; }
+  .css-cat.state-reading .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; }
+
+  @keyframes cat-read-lean {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(1px) rotate(-3deg); }
+  }
+  @keyframes cat-read-eyes {
+    0%, 100% { transform: translateX(-2px); }
+    33% { transform: translateX(0); }
+    66% { transform: translateX(2px); }
+  }
+
+  /* Reading variants */
+  .css-cat.state-reading-scholar .cat-head { animation: cat-read-lean 3s ease-in-out infinite; }
+  .css-cat.state-reading-scholar .cat-pupil { animation: cat-read-eyes 2s steps(3) infinite; }
+  .css-cat.state-reading-scholar .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; }
+  .css-cat.state-reading-ancient .cat-head { animation: cat-read-lean 4s ease-in-out infinite; }
+  .css-cat.state-reading-ancient .cat-pupil { animation: cat-read-eyes 3s steps(3) infinite; }
+  .css-cat.state-reading-ancient .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; box-shadow: 0 0 6px rgba(200,180,100,0.4); }
+
+  /* CAT DEBUGGING — big alert eyes, ears forward, nervous tail */
+  .css-cat.state-debugging .cat-head { animation: cat-debug-hunt 0.6s ease-in-out infinite; }
+  .css-cat.state-debugging .cat-eye { height: 18px; animation: cat-slow-blink 7s ease-in-out infinite; }
+  .css-cat.state-debugging .cat-pupil { width: 3px; height: 14px; }
+  .css-cat.state-debugging .cat-ear.left { transform: rotate(-14deg); }
+  .css-cat.state-debugging .cat-ear.right { transform: rotate(14deg); }
+  .css-cat.state-debugging .cat-tail { animation: cat-debug-tail 0.8s ease-in-out infinite; }
+
+  @keyframes cat-debug-hunt {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    25% { transform: translateX(-2px) translateY(-1px); }
+    75% { transform: translateX(2px) translateY(-1px); }
+  }
+  @keyframes cat-debug-tail {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-10deg); }
+  }
+
+  /* Debugging variants */
+  .css-cat.state-debugging-detective .cat-head { animation: cat-debug-hunt 0.8s ease-in-out infinite; }
+  .css-cat.state-debugging-detective .cat-pupil { width: 5px; border-radius: 50%; }
+  .css-cat.state-debugging-detective .cat-eye { height: 18px; animation: cat-slow-blink 7s ease-in-out infinite; }
+  .css-cat.state-debugging-rage .cat-head { animation: cat-error-shake 0.2s ease-in-out infinite; }
+  .css-cat.state-debugging-rage .cat-eye { height: 20px; animation: cat-slow-blink 8s ease-in-out infinite; box-shadow: 0 0 6px rgba(255,80,80,0.5); }
+  .css-cat.state-debugging-rage .cat-ear.left { transform: rotate(15deg) translateY(4px); }
+  .css-cat.state-debugging-rage .cat-ear.right { transform: rotate(-15deg) translateY(4px); }
+
+  /* CAT INSTALLING / DOWNLOADING — body shakes, tail wraps, patient */
+  .css-cat.state-installing .cat-head,
+  .css-cat.state-downloading .cat-head { animation: cat-install-pulse 1s ease-in-out infinite; }
+  .css-cat.state-installing .cat-tail,
+  .css-cat.state-downloading .cat-tail { transform: rotate(-15deg); animation: none; }
+  .css-cat.state-installing .cat-eye,
+  .css-cat.state-downloading .cat-eye { animation: cat-blink 3s ease-in-out infinite; }
+  .css-cat.state-installing .cat-paw,
+  .css-cat.state-downloading .cat-paw { animation: cat-paw-tap 0.8s ease-in-out infinite; }
+
+  @keyframes cat-install-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+  }
+  @keyframes cat-paw-tap {
+    0%, 70%, 100% { transform: translateY(0); }
+    80% { transform: translateY(-2px); }
+  }
+
+  /* CAT TESTING — eyes checking, tail swishes */
+  .css-cat.state-testing .cat-head { animation: cat-test-nod 0.8s ease-in-out infinite; }
+  .css-cat.state-testing .cat-pupil { animation: cat-test-check 1.2s steps(2) infinite; }
+  .css-cat.state-testing .cat-tail { animation: cat-tail-swish 1s ease-in-out infinite; }
+  .css-cat.state-testing .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  @keyframes cat-test-nod {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px) rotate(-2deg); }
+  }
+  @keyframes cat-test-check {
+    0%, 100% { transform: translateX(-2px); }
+    50% { transform: translateX(2px); }
+  }
+  @keyframes cat-tail-swish {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-15deg); }
+  }
+
+  /* Testing variants */
+  .css-cat.state-testing-scientist .cat-head { animation: cat-test-nod 0.7s ease-in-out infinite; }
+  .css-cat.state-testing-scientist .cat-pupil { animation: cat-test-check 1s steps(2) infinite; width: 5px; border-radius: 50%; }
+  .css-cat.state-testing-scientist .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+  .css-cat.state-testing-perfectionist .cat-head { animation: cat-test-nod 0.5s ease-in-out infinite; }
+  .css-cat.state-testing-perfectionist .cat-pupil { width: 3px; animation: cat-test-check 0.8s steps(2) infinite; }
+  .css-cat.state-testing-perfectionist .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  /* CAT DEPLOYING — proud posture, tail high, ears perked */
+  .css-cat.state-deploying .cat-head { animation: cat-deploy-rise 1.5s ease-in-out infinite; }
+  .css-cat.state-deploying .cat-tail { animation: cat-deploy-tail 1.5s ease-in-out infinite; }
+  .css-cat.state-deploying .cat-ear.left { transform: rotate(-14deg); }
+  .css-cat.state-deploying .cat-ear.right { transform: rotate(14deg); }
+  .css-cat.state-deploying .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; height: 14px; }
+
+  @keyframes cat-deploy-rise {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-5px) scale(1.03); }
+  }
+  @keyframes cat-deploy-tail {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  /* Deploying variants */
+  .css-cat.state-deploying-warp .cat-head { animation: cat-deploy-rise 1s ease-in-out infinite; }
+  .css-cat.state-deploying-warp .cat-eye { animation: cat-slow-blink 6s ease-in-out infinite; box-shadow: 0 0 6px rgba(100,200,255,0.5); }
+  .css-cat.state-deploying-satellite .cat-head { animation: cat-deploy-rise 2s ease-in-out infinite; }
+  .css-cat.state-deploying-satellite .cat-ear.left { transform: rotate(-16deg); }
+  .css-cat.state-deploying-satellite .cat-ear.right { transform: rotate(16deg); }
+
+  /* CAT COOKING — eyes track, whiskers twitch, tail sways */
+  .css-cat.state-cooking .cat-head { animation: cat-cook-stir 0.6s ease-in-out infinite; }
+  .css-cat.state-cooking .cat-pupil { animation: cat-cook-eyes 1.2s ease-in-out infinite; }
+  .css-cat.state-cooking .cat-tail { animation: cat-tail-sway 1.5s ease-in-out infinite; }
+  .css-cat.state-cooking .cat-whisker { animation: cat-cook-whisker 0.8s ease-in-out infinite; }
+  .css-cat.state-cooking .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  @keyframes cat-cook-stir {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px) rotate(-2deg); }
+    75% { transform: translateX(2px) rotate(2deg); }
+  }
+  @keyframes cat-cook-eyes {
+    0%, 100% { transform: translateX(-1px); }
+    50% { transform: translateX(1px); }
+  }
+  @keyframes cat-cook-whisker {
+    0%, 100% { transform: rotate(var(--w-rot, 0deg)); }
+    50% { transform: rotate(calc(var(--w-rot, 0deg) + 5deg)); }
+  }
+
+  /* Cooking/thinking-cooking variant uses same animations */
+  .css-cat.state-thinking-cooking .cat-head { animation: cat-cook-stir 0.8s ease-in-out infinite; }
+  .css-cat.state-thinking-cooking .cat-pupil { animation: cat-cook-eyes 1.5s ease-in-out infinite; }
+  .css-cat.state-thinking-cooking .cat-tail { animation: cat-tail-sway 2s ease-in-out infinite; }
+  .css-cat.state-thinking-cooking .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; }
+
+  /* CAT HATCHING — curled up, emerging stretch, ears unfold */
+  .css-cat.state-hatching .cat-head { animation: cat-hatch-wiggle 0.4s ease-in-out infinite; }
+  .css-cat.state-hatching .cat-eye { animation: cat-hatch-eyes 0.8s ease-in-out infinite; }
+  .css-cat.state-hatching .cat-ear.left { transform: rotate(0deg) scale(0.7); animation: cat-hatch-ear-unfold 2s ease-out forwards; }
+  .css-cat.state-hatching .cat-ear.right { transform: rotate(0deg) scale(0.7); animation: cat-hatch-ear-unfold 2s ease-out forwards; }
+  .css-cat.state-hatching .cat-tail { transform: rotate(-20deg) scale(0.5); }
+
+  @keyframes cat-hatch-wiggle {
+    0%, 100% { transform: rotate(-3deg) scale(0.95); }
+    50% { transform: rotate(3deg) scale(0.95); }
+  }
+  @keyframes cat-hatch-eyes {
+    0%, 40%, 100% { height: 4px; }
+    60%, 80% { height: 12px; }
+  }
+  @keyframes cat-hatch-ear-unfold {
+    0% { transform: rotate(0deg) scale(0.5); }
+    100% { transform: rotate(var(--ear-rot, 0deg)) scale(1); }
+  }
+
+  /* CAT DELETING — batting paw motion, playful swish */
+  .css-cat.state-deleting .cat-head { animation: cat-delete-head 0.5s ease-in-out infinite; }
+  .css-cat.state-deleting .cat-paw.right { animation: cat-delete-bat 0.5s ease-in-out infinite; }
+  .css-cat.state-deleting .cat-tail { animation: cat-tail-wag-fast 0.4s ease-in-out infinite; }
+  .css-cat.state-deleting .cat-eye { animation: cat-slow-blink 5s ease-in-out infinite; height: 12px; }
+  .css-cat.state-deleting .cat-pupil { width: 5px; border-radius: 50%; }
+
+  @keyframes cat-delete-head {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px) rotate(3deg); }
+  }
+  @keyframes cat-delete-bat {
+    0%, 100% { transform: translateY(0) translateX(0); }
+    50% { transform: translateY(-8px) translateX(5px); }
+  }
+
+  /* ── CSS CAT TIER COLORS ─────────────────────────────────────────── */
+
+  /* Tier 0: Grey tabby (default — no override needed) */
+
+  /* Tier 1: Orange/ginger tabby */
+  .css-cat.tier-1 .cat-head { background: radial-gradient(ellipse at 40% 35%, #e8a96a, #cd7f32); }
+  .css-cat.tier-1 .cat-ear.left { border-bottom-color: #cd7f32; }
+  .css-cat.tier-1 .cat-ear.right { border-bottom-color: #cd7f32; }
+  .css-cat.tier-1 .cat-tail::before, .css-cat.tier-1 .cat-tail::after { background: #cd7f32; }
+  .css-cat.tier-1 .cat-paw { background: #b87333; }
+  .css-cat.tier-1 .cat-whisker { background: #e0c090; }
+  .css-cat.tier-1 .cat-nose { border-top-color: #c75070; }
+
+  /* Tier 2: Russian blue */
+  .css-cat.tier-2 .cat-head { background: radial-gradient(ellipse at 40% 35%, #a8c4d8, #7ba3bf); }
+  .css-cat.tier-2 .cat-ear.left { border-bottom-color: #7ba3bf; }
+  .css-cat.tier-2 .cat-ear.right { border-bottom-color: #7ba3bf; }
+  .css-cat.tier-2 .cat-tail::before, .css-cat.tier-2 .cat-tail::after { background: #7ba3bf; }
+  .css-cat.tier-2 .cat-paw { background: #6a90a8; }
+  .css-cat.tier-2 .cat-whisker { background: #c0d8e8; }
+
+  /* Tier 3: Golden/siamese */
+  .css-cat.tier-3 .cat-head { background: radial-gradient(ellipse at 40% 35%, #f0d070, #d4a020); }
+  .css-cat.tier-3 .cat-ear.left { border-bottom-color: #8b6914; }
+  .css-cat.tier-3 .cat-ear.right { border-bottom-color: #8b6914; }
+  .css-cat.tier-3 .cat-ear.left::after, .css-cat.tier-3 .cat-ear.right::after { border-bottom-color: #c4a060; }
+  .css-cat.tier-3 .cat-tail::before, .css-cat.tier-3 .cat-tail::after { background: #8b6914; }
+  .css-cat.tier-3 .cat-paw { background: #8b6914; }
+  .css-cat.tier-3 .cat-whisker { background: #d8c898; }
+
+  /* Tier 4: Rose/pink */
+  .css-cat.tier-4 .cat-head { background: radial-gradient(ellipse at 40% 35%, #e8b4b8, #c77f84); }
+  .css-cat.tier-4 .cat-ear.left { border-bottom-color: #c77f84; }
+  .css-cat.tier-4 .cat-ear.right { border-bottom-color: #c77f84; }
+  .css-cat.tier-4 .cat-tail::before, .css-cat.tier-4 .cat-tail::after { background: #c77f84; }
+  .css-cat.tier-4 .cat-paw { background: #b06a6e; }
+  .css-cat.tier-4 .cat-whisker { background: #e8c8cc; }
+  .css-cat.tier-4 .cat-eye { background: radial-gradient(ellipse, #d8a8d0, #b060a0); }
+
+  /* Tier 5: Prismatic (color cycling) */
+  .css-cat.tier-5 .cat-head { animation-name: cat-prismatic-head !important; animation-duration: 3s !important; animation-timing-function: linear !important; animation-iteration-count: infinite !important; }
+  .css-cat.tier-5 .cat-ear.left,
+  .css-cat.tier-5 .cat-ear.right { border-bottom-color: #6c5ce7; }
+  .css-cat.tier-5 .cat-tail::before, .css-cat.tier-5 .cat-tail::after { background: #6c5ce7; }
+  .css-cat.tier-5 .cat-paw { background: #5a4cd6; }
+  .css-cat.tier-5 .cat-eye { box-shadow: 0 0 8px rgba(108,92,231,0.5); }
+
+  @keyframes cat-prismatic-head {
+    0%, 100% { background: radial-gradient(ellipse at 40% 35%, #a29bfe, #6c5ce7); }
+    25% { background: radial-gradient(ellipse at 40% 35%, #74b9ff, #0984e3); }
+    50% { background: radial-gradient(ellipse at 40% 35%, #fd79a8, #e84393); }
+    75% { background: radial-gradient(ellipse at 40% 35%, #55efc4, #00b894); }
   }
 
   /* ── BASE STATE ANIMATIONS ─────────────────────────────────────── */
@@ -1630,6 +2301,23 @@
       <div class="mouth"></div>
       <div class="foot left"></div>
       <div class="foot right"></div>
+      <!-- CSS Cat character parts (hidden by default, shown with .css-cat) -->
+      <div class="cat-ear left"></div>
+      <div class="cat-ear right"></div>
+      <div class="cat-head"></div>
+      <div class="cat-eye left"><div class="cat-pupil"></div></div>
+      <div class="cat-eye right"><div class="cat-pupil"></div></div>
+      <div class="cat-nose"></div>
+      <div class="cat-mouth"></div>
+      <div class="cat-whisker left top"></div>
+      <div class="cat-whisker left mid"></div>
+      <div class="cat-whisker left bot"></div>
+      <div class="cat-whisker right top"></div>
+      <div class="cat-whisker right mid"></div>
+      <div class="cat-whisker right bot"></div>
+      <div class="cat-tail"></div>
+      <div class="cat-paw left"></div>
+      <div class="cat-paw right"></div>
       <div class="milestone-layer" id="milestoneLayer"></div>
       <div class="accessory-layer" id="accessoryLayer"></div>
       <div class="particle-layer" id="particleLayer"></div>
@@ -1642,6 +2330,8 @@
     <div class="toast-container" id="toastContainer"></div>
     <div class="confetti-layer" id="confettiLayer"></div>
     <div class="stats-tooltip" id="statsTooltip"></div>
+    <div class="char-switch-btn" id="charSwitchBtn" title="Switch character">&#x21C4;</div>
+    <div class="char-picker" id="charPicker"></div>
   </div>
 
   <script>
@@ -1666,6 +2356,7 @@
     const videoElement = document.getElementById("videoRenderer");
     let spriteMode = false;
     let videoMode = false;
+    let cssCharMode = null; // e.g. "css-cat" for CSS-rendered characters
     let spriteRenderer = null;
 
     class SpriteRenderer {
@@ -3063,7 +3754,8 @@
       }
 
       const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
-      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass;
+      const charClass = cssCharMode ? " " + cssCharMode : "";
+      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass + charClass;
       label.textContent = config.label;
       currentState = variant;
 
@@ -3150,7 +3842,8 @@
       ipcRenderer.send("activity-variant-change", currentActivityVariant);
 
       const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
-      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + modeClass;
+      const charClass = cssCharMode ? " " + cssCharMode : "";
+      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + modeClass + charClass;
       label.textContent = config.label || effectiveState;
       currentState = effectiveState;
 
@@ -3524,16 +4217,19 @@
 
     ipcRenderer.on("set-character", async (e, charInfo) => {
       if (!charInfo || charInfo.id === "default") {
-        // Revert to CSS creature
+        // Revert to default CSS creature
         spriteMode = false;
         videoMode = false;
+        cssCharMode = null;
         if (spriteRenderer) {
           spriteRenderer.destroy();
           spriteRenderer = null;
         }
-        scene.className = scene.className.replace(/\s*(sprite-mode|video-mode)/g, "");
+        scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|css-\w+)/g, "");
         // Re-apply current state with CSS creature
-        setState(currentState);
+        const stateToApply = currentState;
+        currentBaseState = null;
+        setState(stateToApply);
       } else {
         // Peek at renderMode from charInfo or character.json
         let renderMode = charInfo.renderMode;
@@ -3552,28 +4248,43 @@
           // Clean up previous renderer
           if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
 
-          if (renderMode === "video") {
+          if (renderMode === "css") {
+            // CSS-rendered character (no sprite/video needed)
+            spriteMode = false;
+            videoMode = false;
+            cssCharMode = "css-" + charInfo.id;
+            // Re-apply current state to show CSS character
+            const stateToApply = currentState;
+            currentBaseState = null;
+            setState(stateToApply);
+          } else if (renderMode === "video") {
+            cssCharMode = null;
             spriteMode = false;
             videoMode = true;
             spriteRenderer = new VideoRenderer(videoElement);
+            await spriteRenderer.loadCharacter(charInfo.path);
+            spriteRenderer.setTier(currentTier);
+            const stateToApply = currentState;
+            currentBaseState = null;
+            setState(stateToApply);
           } else {
+            cssCharMode = null;
             spriteMode = true;
             videoMode = false;
             spriteRenderer = new SpriteRenderer(spriteCanvas);
+            await spriteRenderer.loadCharacter(charInfo.path);
+            spriteRenderer.setTier(currentTier);
+            const stateToApply = currentState;
+            currentBaseState = null;
+            setState(stateToApply);
           }
-
-          await spriteRenderer.loadCharacter(charInfo.path);
-          spriteRenderer.setTier(currentTier);
-          // Re-apply current state to trigger rendering
-          const stateToApply = currentState;
-          currentBaseState = null; // force re-application
-          setState(stateToApply);
         } catch (err) {
           console.error("Failed to load character:", err);
           spriteMode = false;
           videoMode = false;
+          cssCharMode = null;
           if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
-          scene.className = scene.className.replace(/\s*(sprite-mode|video-mode)/g, "");
+          scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|css-\w+)/g, "");
         }
       }
     });
@@ -3596,6 +4307,37 @@
         p.style.transform = `translate(${dx}px, ${dy}px)`;
       });
     });
+
+    // ── CHARACTER PICKER ──────────────────────────────────────────────
+    const charSwitchBtn = document.getElementById("charSwitchBtn");
+    const charPicker = document.getElementById("charPicker");
+    let pickerOpen = false;
+
+    charSwitchBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (pickerOpen) { closePicker(); return; }
+      const { characters, selected } = await ipcRenderer.invoke("get-characters");
+      charPicker.innerHTML = "";
+      // Default option
+      const def = document.createElement("div");
+      def.className = "char-picker-item" + (selected === "default" ? " active" : "");
+      def.textContent = "Default";
+      def.addEventListener("click", () => { ipcRenderer.send("switch-character", "default"); closePicker(); });
+      charPicker.appendChild(def);
+      // Character options
+      for (const ch of characters) {
+        const item = document.createElement("div");
+        item.className = "char-picker-item" + (selected === ch.id ? " active" : "");
+        item.textContent = ch.name;
+        item.addEventListener("click", () => { ipcRenderer.send("switch-character", ch.id); closePicker(); });
+        charPicker.appendChild(item);
+      }
+      charPicker.classList.add("open");
+      pickerOpen = true;
+    });
+
+    function closePicker() { charPicker.classList.remove("open"); pickerOpen = false; }
+    document.addEventListener("click", (e) => { if (pickerOpen && !charPicker.contains(e.target) && e.target !== charSwitchBtn) closePicker(); });
   </script>
 </body>
 </html>

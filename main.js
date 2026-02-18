@@ -908,6 +908,25 @@ app.whenReady().then(() => {
   progression.load();
   loadSelectedCharacter();
 
+  // Character switching from renderer
+  ipcMain.handle("get-characters", () => {
+    const chars = discoverCharacters();
+    return { characters: chars.map(c => ({ id: c.id, name: c.name })), selected: selectedCharacterId };
+  });
+
+  ipcMain.on("switch-character", (e, id) => {
+    saveSelectedCharacter(id);
+    if (id === "default") {
+      applyCharacter(null);
+    } else {
+      const chars = discoverCharacters();
+      const found = chars.find(c => c.id === id);
+      if (found) applyCharacter(found);
+    }
+    // Rebuild tray menu to reflect new selection
+    if (tray) tray.setContextMenu(buildTrayMenu(hooksActive));
+  });
+
   // Listen for idle variant changes from the renderer
   ipcMain.on("idle-variant-change", (e, variant) => {
     currentIdleVariant = variant;

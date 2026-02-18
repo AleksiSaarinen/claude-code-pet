@@ -1,0 +1,6 @@
+{
+  "id": "cat",
+  "name": "Cat",
+  "renderMode": "css",
+  "tierStrategy": "none"
+}

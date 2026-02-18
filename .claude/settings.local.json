@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx electron-builder:*)",
+      "Bash(powershell -File -:*)",
+      "Bash(CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder:*)",
+      "Bash(ls:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo create:*)",
+      "Bash(winget install:*)",
+      "Bash(powershell -Command \"winget install GitHub.cli --accept-package-agreements --accept-source-agreements\")",
+      "Bash(powershell -Command \"& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri ''https://github.com/cli/cli/releases/download/v2.65.0/gh_2.65.0_windows_amd64.zip'' -OutFile \"\"$env:TEMP\\\\gh.zip\"\"; Expand-Archive -Path \"\"$env:TEMP\\\\gh.zip\"\" -DestinationPath \"\"$env:LOCALAPPDATA\\\\Programs\\\\gh\"\" -Force; Write-Output \"\"Installed to $env:LOCALAPPDATA\\\\Programs\\\\gh\"\"}\")",
+      "Bash(GH=\"$LOCALAPPDATA/Programs/gh/bin/gh.exe\")",
+      "Bash(\"$GH\" --version)",
+      "Bash(\"$GH\" auth status)",
+      "Bash(\"$GH\" repo create claude-code-pet --public --source=. --push)",
+      "Bash(\"$GH\" release:*)"
+    ]
+  }
+}

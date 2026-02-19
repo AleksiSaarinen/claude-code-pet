@@ -53,15 +53,18 @@ Never use `taskkill /IM electron.exe` — it doesn't work reliably. Never run `n
 - Main process logs everything via overridden `console.log` → appended to debug.log
 
 ### Known DPI pitfalls at 225%:
+- **`win.setSize()` is BROKEN at 225% DPI** — always snaps window to ~600×660 regardless of input; use `win.setBounds({x,y,width,height})` instead (single atomic OS call, works correctly)
 - `setMinimumSize/setMaximumSize(200,220)` treats args as physical pixels → makes window tiny; don't use
-- `screen.getCursorScreenPoint()` returns physical pixels; divide delta by `display.scaleFactor` before passing to `win.setPosition/setBounds`
+- `screen.getCursorScreenPoint()` returns physical pixels; divide delta by `display.scaleFactor` before passing to `win.setBounds`
 - `webContents.setZoomFactor()` persists across restarts in `Preferences` file → always call `setZoomFactor(1.0)` in `did-finish-load` to override
 - `maximizable: false` breaks client area on frameless transparent windows on Windows — avoid
 
 ### Window sizing (settings menu):
 - Sizes: small 160×176, normal 200×220, large 400×440, xlarge 600×660 (logical px)
-- Scaling uses CSS `transform: scale()` + updated html/body inline dimensions via `set-scale` IPC
-- `win.setSize()` uses logical pixels (same as BrowserWindow constructor) ✓
+- `applyWindowSize(size)` is module-scope in main.js — calls `win.setBounds()` atomically then sends `set-scale` IPC after 80ms
+- `dragInterval` must be cleared before resizing (it calls `setBounds` every 16ms and will fight the resize)
+- CSS `html/body { width:100%; height:100% }` so they fill the actual window; `transform: scale()` on `.scene` for upscaling
+- `set-scale` IPC sent AFTER `setBounds` settles (80ms delay) to avoid Chromium compositor race
 
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

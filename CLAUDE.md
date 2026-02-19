@@ -47,5 +47,21 @@ powershell -Command "Stop-Process -Name electron -Force -ErrorAction SilentlyCon
 
 Never use `taskkill /IM electron.exe` — it doesn't work reliably. Never run `npm start &` multiple times in background tasks as each spawns a new instance.
 
+## Display & Debugging
+- **User display: 225% DPI (scaleFactor: 2.25)** — affects all coordinate/size calculations
+- Debug log (readable by Claude directly): `%APPDATA%/claude-code-pet/debug.log`
+- Main process logs everything via overridden `console.log` → appended to debug.log
+
+### Known DPI pitfalls at 225%:
+- `setMinimumSize/setMaximumSize(200,220)` treats args as physical pixels → makes window tiny; don't use
+- `screen.getCursorScreenPoint()` returns physical pixels; divide delta by `display.scaleFactor` before passing to `win.setPosition/setBounds`
+- `webContents.setZoomFactor()` persists across restarts in `Preferences` file → always call `setZoomFactor(1.0)` in `did-finish-load` to override
+- `maximizable: false` breaks client area on frameless transparent windows on Windows — avoid
+
+### Window sizing (settings menu):
+- Sizes: small 160×176, normal 200×220, large 400×440, xlarge 600×660 (logical px)
+- Scaling uses CSS `transform: scale()` + updated html/body inline dimensions via `set-scale` IPC
+- `win.setSize()` uses logical pixels (same as BrowserWindow constructor) ✓
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

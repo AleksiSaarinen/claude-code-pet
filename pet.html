@@ -91,6 +91,27 @@
     animation: prismatic-cycle 3s linear infinite;
   }
 
+  /* ---- 3D MODEL MODE ---- */
+  .model-canvas {
+    position: absolute;
+    top: -50px; left: -30px;
+    width: 180px; height: 240px;
+    display: none;
+    z-index: 1;
+    -webkit-app-region: no-drag;
+  }
+  .model-mode .model-canvas { display: block; }
+  .model-mode .sprite-canvas,
+  .model-mode .video-renderer { display: none; }
+  .model-mode .antenna,
+  .model-mode .body,
+  .model-mode .eye,
+  .model-mode .mouth,
+  .model-mode .foot { display: none; }
+  .model-mode.tier-5 .model-canvas {
+    animation: prismatic-cycle 3s linear infinite;
+  }
+
   .body {
     position: absolute;
     left: 20px; top: 20px;
@@ -262,7 +283,7 @@
     background: rgba(0,0,0,0.55);
     border: 1.5px solid rgba(255,255,255,0.3);
     color: #fff;
-    font-size: 12px;
+    font-size: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -277,7 +298,9 @@
   .char-picker {
     position: absolute;
     top: 28px; right: 4px;
-    min-width: 110px;
+    min-width: 140px;
+    max-height: 185px;
+    overflow-y: auto;
     background: rgba(20,20,20,0.92);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 8px;
@@ -299,6 +322,20 @@
   }
   .char-picker-item:hover { background: rgba(255,255,255,0.12); }
   .char-picker-item.active { color: #ffd700; font-weight: bold; }
+  .settings-section-header {
+    padding: 5px 12px 2px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+  }
+  .settings-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 3px 0;
+  }
 
   /* ---- SKILL LABEL + XP BAR + LEVEL BADGE ---- */
   .skill-label {
@@ -2287,6 +2324,22 @@
     100% { opacity: 0; transform: translateY(-25px) translateX(-5px); }
   }
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/": "./node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  window.THREE = THREE;
+  window.GLTFLoader = GLTFLoader;
+  window.OrbitControls = OrbitControls;
+</script>
 </head>
 <body>
   <div class="scene" id="scene">
@@ -2294,6 +2347,7 @@
     <div class="creature" id="creature">
       <canvas id="spriteCanvas" class="sprite-canvas" width="120" height="120"></canvas>
       <video id="videoRenderer" class="video-renderer" width="240" height="240" muted playsinline></video>
+      <canvas id="modelCanvas" class="model-canvas" width="180" height="180"></canvas>
       <div class="antenna"></div>
       <div class="body"></div>
       <div class="eye left"><div class="pupil"></div></div>
@@ -2330,7 +2384,7 @@
     <div class="toast-container" id="toastContainer"></div>
     <div class="confetti-layer" id="confettiLayer"></div>
     <div class="stats-tooltip" id="statsTooltip"></div>
-    <div class="char-switch-btn" id="charSwitchBtn" title="Switch character">&#x21C4;</div>
+    <div class="char-switch-btn" id="charSwitchBtn" title="Settings">&#x2699;</div>
     <div class="char-picker" id="charPicker"></div>
   </div>
 
@@ -2351,11 +2405,13 @@
     let unlockedMilestones = new Set();
     let lastProgression = null;
 
-    // ── SPRITE SHEET RENDERING ─────────────────────────────────────
+    // ── SPRITE SHEET / VIDEO / 3D RENDERING ────────────────────────
     const spriteCanvas = document.getElementById("spriteCanvas");
     const videoElement = document.getElementById("videoRenderer");
+    const modelCanvas = document.getElementById("modelCanvas");
     let spriteMode = false;
     let videoMode = false;
+    let modelMode = false;
     let cssCharMode = null; // e.g. "css-cat" for CSS-rendered characters
     let spriteRenderer = null;
 
@@ -2600,6 +2656,295 @@
         }
         this.blobs = {};
         this.config = null;
+      }
+    }
+
+    // ── 3D MODEL RENDERER ──────────────────────────────────────────
+    class ModelRenderer {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.config = null;
+        this.basePath = "";
+        this.currentState = "idle";
+        this.tierIndex = 0;
+        this._renderer = null;
+        this.threeScene = null;
+        this.camera = null;
+        this.controls = null;
+        this.mixer = null;
+        this.model = null;
+        this.stateClips = {};   // stateKey → AnimationClip
+        this.modelClips = {};   // animation name → built-in clip
+        this.currentAction = null;
+        this.animFrameId = null;
+        this.clock = null;
+        this.propGroups = {};   // propSetName → THREE.Group
+        this.currentPropSet = null;
+      }
+
+      async loadCharacter(charPath) {
+        this.destroy();
+        let normalized = charPath.replace(/\\/g, "/").replace(/\/?$/, "/");
+        if (!normalized.startsWith("file://")) {
+          normalized = "file:///" + normalized.replace(/^\/+/, "");
+        }
+        this.basePath = normalized;
+
+        const raw = await fetch(this.basePath + "character.json").then(r => r.text());
+        this.config = JSON.parse(raw);
+        if (!this.config.fallbackMap) this.config.fallbackMap = {};
+        if (!this.config.states) this.config.states = {};
+
+        this.clock = new THREE.Timer();
+
+        this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
+        this._renderer.setSize(180, 180);
+        this._renderer.setPixelRatio(window.devicePixelRatio || 1);
+        this._renderer.setClearColor(0x000000, 0);
+        this._renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this._renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this._renderer.toneMappingExposure = 1.5;
+
+        this.threeScene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+
+        const ambient = new THREE.AmbientLight(0xffffff, 2.0);
+        this.threeScene.add(ambient);
+        // Key light (front-left)
+        const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        keyLight.position.set(-1, 2, 3);
+        this.threeScene.add(keyLight);
+        // Fill light (front-right)
+        const fillLight = new THREE.DirectionalLight(0xffeedd, 0.8);
+        fillLight.position.set(2, 1, 2);
+        this.threeScene.add(fillLight);
+        // Back rim light
+        const rimLight = new THREE.DirectionalLight(0xaaddff, 0.5);
+        rimLight.position.set(0, 2, -3);
+        this.threeScene.add(rimLight);
+
+        await this._loadModel(this.config.file);
+        this._buildAllProps();
+
+        // Resolve animation clips — supports both built-in ('animation' key) and external GLB ('file' key)
+        const fileCache = {};
+        const animPromises = [];
+        for (const [stateKey, stateConf] of Object.entries(this.config.states)) {
+          if (stateConf.animation) {
+            // Use a clip baked into the model by name
+            const clip = this.modelClips[stateConf.animation];
+            if (clip) this.stateClips[stateKey] = clip;
+          } else if (stateConf.file) {
+            // Load from an external GLB (deduplicated)
+            if (fileCache[stateConf.file] !== undefined) {
+              animPromises.push(fileCache[stateConf.file].then(clip => { if (clip) this.stateClips[stateKey] = clip; }));
+            } else {
+              const p = this._loadAnimationClip(stateConf.file);
+              fileCache[stateConf.file] = p;
+              animPromises.push(p.then(clip => { if (clip) this.stateClips[stateKey] = clip; }));
+            }
+          }
+        }
+        await Promise.allSettled(animPromises);
+        console.log("[ModelRenderer] loaded state clips:", Object.keys(this.stateClips));
+
+        this.setState("idle");
+        this._startLoop();
+      }
+
+      _loadModel(filename) {
+        return new Promise((resolve, reject) => {
+          const loader = new GLTFLoader();
+          loader.load(this.basePath + filename, (gltf) => {
+            this.model = gltf.scene;
+
+            // Scale and center horizontally; keep feet near Y=0
+            const box = new THREE.Box3().setFromObject(this.model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 1.8 / maxDim;
+            this.model.scale.setScalar(scale);
+            this.model.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+            this.model.rotation.y = Math.PI; // animations face -Z, rotate to face camera at +Z
+            this.threeScene.add(this.model);
+
+            this.mixer = new THREE.AnimationMixer(this.model);
+            // Store built-in animation clips by name for `animation` property states
+            this.modelClips = {};
+            (gltf.animations || []).forEach(clip => { this.modelClips[clip.name] = clip; });
+
+            // Camera looks at the vertical midpoint of the character
+            const scaledH = size.y * scale;
+            const midY = scaledH * 0.5;
+            const dist = (scaledH / 2) / Math.tan((22.5 * Math.PI) / 180) * 1.15;
+            // Set up OrbitControls first, then position camera relative to target
+            this.controls = new OrbitControls(this.camera, this.canvas);
+            this.controls.enableDamping = true;
+            this.controls.dampingFactor = 0.08;
+            this.controls.enableZoom = false;
+            this.controls.enablePan = false;
+            this.controls.mouseButtons = { LEFT: null, MIDDLE: null, RIGHT: THREE.MOUSE.ROTATE };
+            this.controls.minPolarAngle = 0.1;
+            this.controls.maxPolarAngle = Math.PI * 0.8;
+
+            // Target: upper-mid body (70% height) so face is visible
+            const targetY = scaledH * 0.7;
+            this.controls.target.set(0, targetY, 0);
+            // Camera: at eye level directly in front
+            this.camera.up.set(0, 1, 0);
+            this.camera.position.set(0, targetY + dist * 0.05, dist);
+            this.controls.update();
+
+            // Suppress context menu on right-click
+            this.canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+            // Left-click drag = move window (handled in main.js via screen coords)
+            this.canvas.addEventListener("mousedown", (e) => {
+              if (e.button === 0) ipcRenderer.send("start-window-drag");
+            });
+            window.addEventListener("mouseup", this._onMouseUp = (e) => {
+              if (e.button === 0) ipcRenderer.send("stop-window-drag");
+            });
+
+            resolve();
+          }, undefined, reject);
+        });
+      }
+
+      _loadAnimationClip(filename) {
+        return new Promise((resolve) => {
+          const loader = new GLTFLoader();
+          loader.load(this.basePath + filename, (gltf) => {
+            resolve(gltf.animations && gltf.animations.length > 0 ? gltf.animations[0] : null);
+          }, undefined, () => resolve(null));
+        });
+      }
+
+      _buildAllProps() {
+        this.propGroups['desk'] = this._buildDeskGroup();
+        for (const group of Object.values(this.propGroups)) {
+          group.visible = false;
+          this.threeScene.add(group);
+        }
+      }
+
+      _buildDeskGroup() {
+        const group = new THREE.Group();
+        const mat = (color, emissive, emissiveIntensity) => new THREE.MeshStandardMaterial({
+          color: new THREE.Color(color),
+          emissive: emissive ? new THREE.Color(emissive) : new THREE.Color(0x000000),
+          emissiveIntensity: emissiveIntensity || 0,
+          roughness: 0.6,
+          metalness: 0.3,
+          side: THREE.DoubleSide
+        });
+
+        const mesh = (geo, material, x, y, z) => {
+          const m = new THREE.Mesh(geo, material);
+          m.position.set(x, y, z);
+          group.add(m);
+        };
+
+        // Desk surface — behind character from camera's view (negative Z)
+        mesh(new THREE.BoxGeometry(1.5, 0.05, 0.6),   mat('#222222'),                   0,      0.82,  -0.35);
+        // Desk legs
+        mesh(new THREE.BoxGeometry(0.05, 0.82, 0.05), mat('#222222'),                  -0.68,  0.41,  -0.35);
+        mesh(new THREE.BoxGeometry(0.05, 0.82, 0.05), mat('#222222'),                   0.68,  0.41,  -0.35);
+        // Monitor back
+        mesh(new THREE.BoxGeometry(0.72, 0.48, 0.04), mat('#1a1a1a'),                   0,     1.18,  -0.55);
+        // Monitor screen (glowing, faces toward camera so glow is visible)
+        mesh(new THREE.BoxGeometry(0.65, 0.42, 0.01), mat('#111111', '#00aaff', 0.7),   0,     1.18,  -0.53);
+        // Monitor stand
+        mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), mat('#222222'),                   0,     0.96,  -0.55);
+        // Monitor base
+        mesh(new THREE.BoxGeometry(0.22, 0.03, 0.16), mat('#222222'),                   0,     0.85,  -0.55);
+        // Keyboard — near edge of desk, close to character
+        mesh(new THREE.BoxGeometry(0.52, 0.018, 0.16), mat('#333333', '#030303', 1),    0,     0.855, -0.20);
+
+        return group;
+      }
+
+      _updatePropsForState(state) {
+        const desired = this.config.stateProps?.[state] ?? null;
+        if (desired === this.currentPropSet) return;
+        for (const [name, group] of Object.entries(this.propGroups)) {
+          group.visible = (name === desired);
+        }
+        this.currentPropSet = desired;
+      }
+
+      resolveState(key) {
+        if (this.config.states[key]) return key;
+        const visited = new Set();
+        let current = key;
+        while (this.config.fallbackMap[current] && !visited.has(current)) {
+          visited.add(current);
+          current = this.config.fallbackMap[current];
+          if (this.config.states[current]) return current;
+        }
+        return "idle";
+      }
+
+      setState(stateKey) {
+        if (!this.mixer) return;
+        const resolved = this.resolveState(stateKey);
+        this.currentState = resolved;
+        const stateConf = this.config.states[resolved];
+        if (!stateConf) return;
+
+        const clip = this.stateClips[resolved] || Object.values(this.stateClips)[0];
+        if (!clip) return;
+
+        if (this.currentAction) this.currentAction.fadeOut(0.25);
+        const action = this.mixer.clipAction(clip);
+        action.loop = stateConf.loop !== false ? THREE.LoopRepeat : THREE.LoopOnce;
+        action.clampWhenFinished = stateConf.loop === false;
+        action.reset().fadeIn(0.25).play();
+        this._updatePropsForState(resolved);
+        this.currentAction = action;
+      }
+
+      setTier(tierIndex) {
+        this.tierIndex = tierIndex;
+      }
+
+      _startLoop() {
+        const loop = () => {
+          this.animFrameId = requestAnimationFrame(loop);
+          if (this.mixer) { this.clock.update(); this.mixer.update(this.clock.getDelta()); }
+          if (this.controls) this.controls.update();
+          if (this._renderer && this.threeScene && this.camera) {
+            this._renderer.render(this.threeScene, this.camera);
+          }
+        };
+        loop();
+      }
+
+      destroy() {
+        if (this.animFrameId) { cancelAnimationFrame(this.animFrameId); this.animFrameId = null; }
+        if (this._onMouseUp) { window.removeEventListener("mouseup", this._onMouseUp); this._onMouseUp = null; }
+        ipcRenderer.send("stop-window-drag");
+        if (this.controls) { this.controls.dispose(); this.controls = null; }
+        if (this.mixer) { this.mixer.stopAllAction(); this.mixer = null; }
+        if (this.model && this.threeScene) { this.threeScene.remove(this.model); this.model = null; }
+        for (const group of Object.values(this.propGroups)) {
+          if (this.threeScene) this.threeScene.remove(group);
+          group.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) obj.material.dispose();
+          });
+        }
+        this.propGroups = {};
+        this.currentPropSet = null;
+        if (this._renderer) { this._renderer.dispose(); this._renderer = null; }
+        this.stateClips = {};
+        this.modelClips = {};
+        this.currentAction = null;
+        this.config = null;
+        this.threeScene = null;
+        this.camera = null;
+        this.clock = null;
       }
     }
 
@@ -3753,17 +4098,17 @@
         ipcRenderer.send("idle-variant-change", "idle");
       }
 
-      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
+      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
       const charClass = cssCharMode ? " " + cssCharMode : "";
       scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass + charClass;
       label.textContent = config.label;
       currentState = variant;
 
-      if ((spriteMode || videoMode) && spriteRenderer) {
+      if ((spriteMode || videoMode || modelMode) && spriteRenderer) {
         spriteRenderer.setState(variant);
       }
 
-      const customMode = spriteMode || videoMode;
+      const customMode = spriteMode || videoMode || modelMode;
       const showAccessories = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
       const showParticles = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
 
@@ -3841,17 +4186,17 @@
 
       ipcRenderer.send("activity-variant-change", currentActivityVariant);
 
-      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : "";
+      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
       const charClass = cssCharMode ? " " + cssCharMode : "";
       scene.className = "scene state-" + effectiveState + " tier-" + currentTier + modeClass + charClass;
       label.textContent = config.label || effectiveState;
       currentState = effectiveState;
 
-      if ((spriteMode || videoMode) && spriteRenderer) {
+      if ((spriteMode || videoMode || modelMode) && spriteRenderer) {
         spriteRenderer.setState(effectiveState);
       }
 
-      const customMode = spriteMode || videoMode;
+      const customMode = spriteMode || videoMode || modelMode;
       const showAccessories = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
       const showParticles = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
 
@@ -4064,7 +4409,7 @@
         scene.classList.remove("tier-" + currentTier);
         scene.classList.add("tier-" + tier);
         currentTier = tier;
-        if ((spriteMode || videoMode) && spriteRenderer) {
+        if ((spriteMode || videoMode || modelMode) && spriteRenderer) {
           spriteRenderer.setTier(tier);
         }
       }
@@ -4220,12 +4565,13 @@
         // Revert to default CSS creature
         spriteMode = false;
         videoMode = false;
+        modelMode = false;
         cssCharMode = null;
         if (spriteRenderer) {
           spriteRenderer.destroy();
           spriteRenderer = null;
         }
-        scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|css-\w+)/g, "");
+        scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|model-mode|css-\w+)/g, "");
         // Re-apply current state with CSS creature
         const stateToApply = currentState;
         currentBaseState = null;
@@ -4261,7 +4607,19 @@
             cssCharMode = null;
             spriteMode = false;
             videoMode = true;
+            modelMode = false;
             spriteRenderer = new VideoRenderer(videoElement);
+            await spriteRenderer.loadCharacter(charInfo.path);
+            spriteRenderer.setTier(currentTier);
+            const stateToApply = currentState;
+            currentBaseState = null;
+            setState(stateToApply);
+          } else if (renderMode === "3d") {
+            cssCharMode = null;
+            spriteMode = false;
+            videoMode = false;
+            modelMode = true;
+            spriteRenderer = new ModelRenderer(modelCanvas);
             await spriteRenderer.loadCharacter(charInfo.path);
             spriteRenderer.setTier(currentTier);
             const stateToApply = currentState;
@@ -4271,6 +4629,7 @@
             cssCharMode = null;
             spriteMode = true;
             videoMode = false;
+            modelMode = false;
             spriteRenderer = new SpriteRenderer(spriteCanvas);
             await spriteRenderer.loadCharacter(charInfo.path);
             spriteRenderer.setTier(currentTier);
@@ -4282,9 +4641,10 @@
           console.error("Failed to load character:", err);
           spriteMode = false;
           videoMode = false;
+          modelMode = false;
           cssCharMode = null;
           if (spriteRenderer) { spriteRenderer.destroy(); spriteRenderer = null; }
-          scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|css-\w+)/g, "");
+          scene.className = scene.className.replace(/\s*(sprite-mode|video-mode|model-mode|css-\w+)/g, "");
         }
       }
     });
@@ -4308,23 +4668,36 @@
       });
     });
 
-    // ── CHARACTER PICKER ──────────────────────────────────────────────
+    // ── SETTINGS MENU ──────────────────────────────────────────────
     const charSwitchBtn = document.getElementById("charSwitchBtn");
     const charPicker = document.getElementById("charPicker");
     let pickerOpen = false;
 
+    const WINDOW_SIZE_OPTIONS = [
+      { id: "small",  label: "Small  (160×176)" },
+      { id: "normal", label: "Normal (200×220)" },
+      { id: "large",  label: "2× Large (400×440)" },
+      { id: "xlarge", label: "3× Large (600×660)" },
+    ];
+
     charSwitchBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (pickerOpen) { closePicker(); return; }
-      const { characters, selected } = await ipcRenderer.invoke("get-characters");
+      const { characters, selected, windowSize } = await ipcRenderer.invoke("get-settings");
       charPicker.innerHTML = "";
-      // Default option
+
+      // ── Character section
+      const charHeader = document.createElement("div");
+      charHeader.className = "settings-section-header";
+      charHeader.textContent = "Character";
+      charPicker.appendChild(charHeader);
+
       const def = document.createElement("div");
       def.className = "char-picker-item" + (selected === "default" ? " active" : "");
       def.textContent = "Default";
       def.addEventListener("click", () => { ipcRenderer.send("switch-character", "default"); closePicker(); });
       charPicker.appendChild(def);
-      // Character options
+
       for (const ch of characters) {
         const item = document.createElement("div");
         item.className = "char-picker-item" + (selected === ch.id ? " active" : "");
@@ -4332,12 +4705,44 @@
         item.addEventListener("click", () => { ipcRenderer.send("switch-character", ch.id); closePicker(); });
         charPicker.appendChild(item);
       }
+
+      // ── Divider
+      const divider = document.createElement("div");
+      divider.className = "settings-divider";
+      charPicker.appendChild(divider);
+
+      // ── Window size section
+      const sizeHeader = document.createElement("div");
+      sizeHeader.className = "settings-section-header";
+      sizeHeader.textContent = "Window Size";
+      charPicker.appendChild(sizeHeader);
+
+      for (const sz of WINDOW_SIZE_OPTIONS) {
+        const item = document.createElement("div");
+        item.className = "char-picker-item" + (windowSize === sz.id ? " active" : "");
+        item.textContent = sz.label;
+        item.addEventListener("click", () => { ipcRenderer.send("set-window-size", sz.id); closePicker(); });
+        charPicker.appendChild(item);
+      }
+
       charPicker.classList.add("open");
       pickerOpen = true;
     });
 
     function closePicker() { charPicker.classList.remove("open"); pickerOpen = false; }
     document.addEventListener("click", (e) => { if (pickerOpen && !charPicker.contains(e.target) && e.target !== charSwitchBtn) closePicker(); });
+
+    // ── WINDOW SCALE ──────────────────────────────────────────────
+    ipcRenderer.on("set-scale", (e, scale) => {
+      const w = Math.round(200 * scale) + "px";
+      const h = Math.round(220 * scale) + "px";
+      document.documentElement.style.width = w;
+      document.documentElement.style.height = h;
+      document.body.style.width = w;
+      document.body.style.height = h;
+      scene.style.transformOrigin = "top left";
+      scene.style.transform = scale === 1 ? "" : `scale(${scale})`;
+    });
   </script>
 </body>
 </html>

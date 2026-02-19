@@ -9,6 +9,24 @@ const os = require("os");
 // This uses Electron's bundled Node.js so users don't need Node.js installed.
 const IS_HOOK_MODE = process.argv.includes("--run-hook");
 
+// ── Log file ─────────────────────────────────────────────────────────────────
+const LOG_FILE = path.join(app.getPath("userData"), "debug.log");
+const _origLog = console.log.bind(console);
+const _origErr = console.error.bind(console);
+function writeLog(...args) {
+  const line = `[${new Date().toISOString()}] ${args.join(" ")}\n`;
+  try { fs.appendFileSync(LOG_FILE, line); } catch (e) {}
+}
+console.log = (...a) => { _origLog(...a); writeLog(...a); };
+console.error = (...a) => { _origErr(...a); writeLog("ERROR", ...a); };
+// Keep log under 200KB by trimming on startup
+try {
+  if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 200000) {
+    const lines = fs.readFileSync(LOG_FILE, "utf8").split("\n");
+    fs.writeFileSync(LOG_FILE, lines.slice(-500).join("\n"));
+  }
+} catch (e) {}
+
 // Status file that controls the pet's state
 const STATUS_FILE = path.join(
   app.getPath("userData"),
@@ -22,6 +40,18 @@ const CHARACTER_FILE = path.join(
   app.getPath("userData"),
   "selected-character.json"
 );
+const SETTINGS_FILE = path.join(
+  app.getPath("userData"),
+  "settings.json"
+);
+
+const WINDOW_SIZES = {
+  small:  { w: 160, h: 176 },
+  normal: { w: 200, h: 220 },
+  large:  { w: 400, h: 440 },
+  xlarge: { w: 600, h: 660 },
+};
+let windowSize = "normal";
 
 // Ensure status file exists
 if (!fs.existsSync(STATUS_FILE)) fs.writeFileSync(STATUS_FILE, "idle");
@@ -462,6 +492,21 @@ function loadSelectedCharacter() {
   } catch (e) { /* use default */ }
 }
 
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+      if (data.windowSize && WINDOW_SIZES[data.windowSize]) windowSize = data.windowSize;
+    }
+  } catch (e) { /* use defaults */ }
+}
+
+function saveSettings() {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ windowSize }, null, 2));
+  } catch (e) { /* ignore */ }
+}
+
 function saveSelectedCharacter(id) {
   selectedCharacterId = id;
   try {
@@ -614,12 +659,13 @@ function removeHooks() {
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const sz = WINDOW_SIZES[windowSize] || WINDOW_SIZES.normal;
 
   win = new BrowserWindow({
-    width: 200,
-    height: 220,
-    x: width - 220,
-    y: height - 240,
+    width: sz.w,
+    height: sz.h,
+    x: width - sz.w - 20,
+    y: height - sz.h - 20,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -628,15 +674,24 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      zoomFactor: 1.0,
     },
   });
 
   win.loadFile("pet.html");
+  win.webContents.openDevTools({ mode: "detach" });
   win.setAlwaysOnTop(true, "screen-saver");
   win.setIgnoreMouseEvents(false);
 
   // Apply saved character once renderer is ready
   win.webContents.on("did-finish-load", () => {
+    // Always reset zoom first (prevents Chromium from restoring a stale persisted zoom)
+    win.webContents.setZoomFactor(1.0);
+    const _sz = WINDOW_SIZES[windowSize] || WINDOW_SIZES.normal;
+    const disp = screen.getPrimaryDisplay();
+    console.log('startup — windowSize:', windowSize, 'bounds:', JSON.stringify(win.getBounds()), 'scaleFactor:', disp.scaleFactor, 'zoom:', win.webContents.getZoomFactor());
+    win.webContents.executeJavaScript('JSON.stringify({innerW:window.innerWidth,innerH:window.innerHeight,dpr:window.devicePixelRatio})').then(r => console.log('renderer viewport:', r));
+    if (_sz.w !== 200) win.webContents.send("set-scale", _sz.w / 200);
     if (selectedCharacterId !== "default") {
       const chars = discoverCharacters();
       const selected = chars.find(c => c.id === selectedCharacterId);
@@ -914,6 +969,26 @@ app.whenReady().then(() => {
     return { characters: chars.map(c => ({ id: c.id, name: c.name })), selected: selectedCharacterId };
   });
 
+  ipcMain.handle("get-settings", () => {
+    const chars = discoverCharacters();
+    return {
+      characters: chars.map(c => ({ id: c.id, name: c.name })),
+      selected: selectedCharacterId,
+      windowSize,
+    };
+  });
+
+  ipcMain.on("set-window-size", (e, size) => {
+    const sz = WINDOW_SIZES[size];
+    if (!sz || !win) return;
+    windowSize = size;
+    saveSettings();
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    win.setSize(sz.w, sz.h);
+    win.setPosition(width - sz.w - 20, height - sz.h - 20);
+    win.webContents.send("set-scale", sz.w / 200);
+  });
+
   ipcMain.on("switch-character", (e, id) => {
     saveSelectedCharacter(id);
     if (id === "default") {
@@ -937,6 +1012,28 @@ app.whenReady().then(() => {
     currentActivityVariant = variant;
   });
 
+  // Window drag for model canvas (avoids DPI coordinate issues by polling in main)
+  let dragInterval = null, dragInitCursor = null, dragInitWin = null;
+  ipcMain.on("start-window-drag", () => {
+    dragInitCursor = screen.getCursorScreenPoint();
+    const b = win.getBounds();
+    dragInitWin = { x: b.x, y: b.y, w: b.width, h: b.height };
+    dragInterval = setInterval(() => {
+      if (!win || win.isDestroyed()) { clearInterval(dragInterval); dragInterval = null; return; }
+      const cur = screen.getCursorScreenPoint();
+      const sf = screen.getDisplayNearestPoint(cur).scaleFactor || 1;
+      win.setBounds({
+        x: dragInitWin.x + Math.round((cur.x - dragInitCursor.x) / sf),
+        y: dragInitWin.y + Math.round((cur.y - dragInitCursor.y) / sf),
+        width: dragInitWin.w,
+        height: dragInitWin.h,
+      });
+    }, 16);
+  });
+  ipcMain.on("stop-window-drag", () => {
+    if (dragInterval) { clearInterval(dragInterval); dragInterval = null; }
+  });
+
   // Auto-setup hooks on launch
   let hooksActive = false;
   try {
@@ -946,6 +1043,7 @@ app.whenReady().then(() => {
     console.error("Could not auto-setup hooks:", e.message);
   }
 
+  loadSettings();
   createWindow();
 
   // System tray

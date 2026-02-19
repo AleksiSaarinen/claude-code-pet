@@ -1,0 +1,77 @@
+{
+  "id": "pixel-girl",
+  "name": "3D Waifu",
+  "renderMode": "3d",
+  "file": "model-animated.glb",
+  "states": {
+    "idle": {
+      "file": "animations/standing_relax.glb",
+      "loop": true
+    },
+    "coding": {
+      "file": "animations/play_video_game.glb",
+      "loop": true
+    },
+    "thinking": {
+      "file": "animations/scratch.glb",
+      "loop": true
+    },
+    "success": {
+      "file": "animations/victory_celebration.glb",
+      "loop": false
+    },
+    "error": {
+      "file": "animations/hurt.glb",
+      "loop": false
+    },
+    "searching": {
+      "file": "animations/look_around.glb",
+      "loop": true
+    },
+    "reading": {
+      "file": "animations/sit.glb",
+      "loop": true
+    },
+    "debugging": {
+      "file": "animations/frustrated_02.glb",
+      "loop": true
+    },
+    "installing": {
+      "file": "animations/wait.glb",
+      "loop": true
+    },
+    "testing": {
+      "file": "animations/warm_up.glb",
+      "loop": true
+    },
+    "deploying": {
+      "file": "animations/cast_a_spell.glb",
+      "loop": true
+    },
+    "cooking": {
+      "file": "animations/dig.glb",
+      "loop": true
+    },
+    "hatching": {
+      "file": "animations/jump.glb",
+      "loop": false
+    },
+    "deleting": {
+      "file": "animations/slash.glb",
+      "loop": true
+    },
+    "downloading": {
+      "file": "animations/fold_arms.glb",
+      "loop": true
+    }
+  },
+  "fallbackMap": {},
+  "tierStrategy": "none",
+  "particlesEnabled": false,
+  "accessoriesEnabled": false,
+  "stateProps": {
+    "coding":    "desk",
+    "reading":   "desk",
+    "debugging": "desk"
+  }
+}

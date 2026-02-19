@@ -88,6 +88,7 @@ if (IS_HOOK_MODE) {
 }
 
 let win, tray;
+let dragInterval = null, dragInitCursor = null, dragInitWin = null;
 let currentStatus = "idle";
 let lastChangeTime = Date.now();
 let currentIdleVariant = "idle";
@@ -657,6 +658,21 @@ function removeHooks() {
 
 // ── Window ──────────────────────────────────────────────────────────────────
 
+function applyWindowSize(size) {
+  const sz = WINDOW_SIZES[size];
+  if (!sz || !win || win.isDestroyed()) return;
+  if (dragInterval) { clearInterval(dragInterval); dragInterval = null; }
+  windowSize = size;
+  saveSettings();
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const targetScale = sz.w / 200;
+  win.setBounds({ x: width - sz.w - 20, y: height - sz.h - 20, width: sz.w, height: sz.h });
+  setTimeout(() => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send("set-scale", targetScale);
+  }, 80);
+}
+
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const sz = WINDOW_SIZES[windowSize] || WINDOW_SIZES.normal;
@@ -691,7 +707,7 @@ function createWindow() {
     const disp = screen.getPrimaryDisplay();
     console.log('startup — windowSize:', windowSize, 'bounds:', JSON.stringify(win.getBounds()), 'scaleFactor:', disp.scaleFactor, 'zoom:', win.webContents.getZoomFactor());
     win.webContents.executeJavaScript('JSON.stringify({innerW:window.innerWidth,innerH:window.innerHeight,dpr:window.devicePixelRatio})').then(r => console.log('renderer viewport:', r));
-    if (_sz.w !== 200) win.webContents.send("set-scale", _sz.w / 200);
+    win.webContents.send("set-scale", _sz.w / 200);
     if (selectedCharacterId !== "default") {
       const chars = discoverCharacters();
       const selected = chars.find(c => c.id === selectedCharacterId);
@@ -978,16 +994,7 @@ app.whenReady().then(() => {
     };
   });
 
-  ipcMain.on("set-window-size", (e, size) => {
-    const sz = WINDOW_SIZES[size];
-    if (!sz || !win) return;
-    windowSize = size;
-    saveSettings();
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    win.setSize(sz.w, sz.h);
-    win.setPosition(width - sz.w - 20, height - sz.h - 20);
-    win.webContents.send("set-scale", sz.w / 200);
-  });
+  ipcMain.on("set-window-size", (e, size) => applyWindowSize(size));
 
   ipcMain.on("switch-character", (e, id) => {
     saveSelectedCharacter(id);
@@ -1013,11 +1020,13 @@ app.whenReady().then(() => {
   });
 
   // Window drag for model canvas (avoids DPI coordinate issues by polling in main)
-  let dragInterval = null, dragInitCursor = null, dragInitWin = null;
   ipcMain.on("start-window-drag", () => {
+    if (dragInterval) { clearInterval(dragInterval); dragInterval = null; } // prevent stacking
     dragInitCursor = screen.getCursorScreenPoint();
     const b = win.getBounds();
-    dragInitWin = { x: b.x, y: b.y, w: b.width, h: b.height };
+    // Use the saved target size (not current bounds which may still be animating)
+    const sz = WINDOW_SIZES[windowSize] || WINDOW_SIZES.normal;
+    dragInitWin = { x: b.x, y: b.y, w: sz.w, h: sz.h };
     dragInterval = setInterval(() => {
       if (!win || win.isDestroyed()) { clearInterval(dragInterval); dragInterval = null; return; }
       const cur = screen.getCursorScreenPoint();

@@ -6,8 +6,8 @@
   html, body {
     background: transparent;
     overflow: hidden;
-    width: 200px;
-    height: 220px;
+    width: 100%;
+    height: 100%;
     user-select: none;
     -webkit-app-region: drag;
   }
@@ -2831,6 +2831,8 @@
 
       _buildDeskGroup() {
         const group = new THREE.Group();
+        group.position.y = 0.30; // shift desk up
+        group.position.z = -0.20; // push further behind character
         const mat = (color, emissive, emissiveIntensity) => new THREE.MeshStandardMaterial({
           color: new THREE.Color(color),
           emissive: emissive ? new THREE.Color(emissive) : new THREE.Color(0x000000),
@@ -2855,8 +2857,8 @@
         mesh(new THREE.BoxGeometry(0.72, 0.48, 0.04), mat('#1a1a1a'),                   0,     1.18,  -0.55);
         // Monitor screen (glowing, faces toward camera so glow is visible)
         mesh(new THREE.BoxGeometry(0.65, 0.42, 0.01), mat('#111111', '#00aaff', 0.7),   0,     1.18,  -0.53);
-        // Monitor stand
-        mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), mat('#222222'),                   0,     0.96,  -0.55);
+        // Monitor stand — top flush with screen bottom edge (1.18 - 0.21 = 0.97)
+        mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), mat('#222222'),                   0,     0.91,  -0.55);
         // Monitor base
         mesh(new THREE.BoxGeometry(0.22, 0.03, 0.16), mat('#222222'),                   0,     0.85,  -0.55);
         // Keyboard — near edge of desk, close to character
@@ -4734,14 +4736,15 @@
 
     // ── WINDOW SCALE ──────────────────────────────────────────────
     ipcRenderer.on("set-scale", (e, scale) => {
-      const w = Math.round(200 * scale) + "px";
-      const h = Math.round(220 * scale) + "px";
-      document.documentElement.style.width = w;
-      document.documentElement.style.height = h;
-      document.body.style.width = w;
-      document.body.style.height = h;
-      scene.style.transformOrigin = "top left";
-      scene.style.transform = scale === 1 ? "" : `scale(${scale})`;
+      if (Math.abs(scale - 1) < 0.02) {
+        scene.style.transform = "";
+        scene.style.transformOrigin = "";
+      } else {
+        scene.style.transformOrigin = "top left";
+        scene.style.transform = `scale(${scale})`;
+      }
+      // Force Chromium to flush its paint queue
+      void scene.offsetWidth;
     });
   </script>
 </body>

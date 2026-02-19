@@ -18,7 +18,7 @@
     "testing": { "file": "testing.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "deploying": { "file": "deploying.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "cooking": { "file": "cooking.png", "frameCount": 145, "frameDuration": 42, "loop": true },
-    "hatching": { "file": "hatching.png", "frameCount": 145, "frameDuration": 42, "loop": false },
+    "hatching": { "file": "hatching.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "deleting": { "file": "deleting.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "downloading": { "file": "downloading.png", "frameCount": 145, "frameDuration": 42, "loop": true },
     "idle-vibing": { "file": "idle-vibing.png", "frameCount": 145, "frameDuration": 42, "loop": true },

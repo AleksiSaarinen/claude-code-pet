@@ -31,5 +31,21 @@ node tools/process-sprites.js characters/grok-test1/raw/STATE.png --frames 4 --r
 ### Completed states (12/16):
 idle, coding, thinking, success, error, searching, reading, installing, testing, deploying, cooking
 
+## Running the App
+Always kill existing instances before starting. Use these exact commands:
+
+**Kill all instances:**
+```bash
+powershell -Command "Stop-Process -Name electron -Force -ErrorAction SilentlyContinue"
+```
+
+**Kill and restart (do these separately, not chained in background):**
+```bash
+# Step 1 - kill:
+powershell -Command "Stop-Process -Name electron -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process 'cmd' -ArgumentList '/c cd /d C:\Users\allus\Documents\GitHub\claude-code-pet && npm start' -WindowStyle Hidden"
+```
+
+Never use `taskkill /IM electron.exe` — it doesn't work reliably. Never run `npm start &` multiple times in background tasks as each spawns a new instance.
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

@@ -2952,8 +2952,8 @@
 
     // Map state → display name for the skill label
     const STATE_SKILL_NAME = {
-      idle: "Chilling", "idle-vibing": "Vibing", "idle-sleepy": "Sleepy",
-      "idle-coffee": "Coffee", "idle-stargazing": "Stargazing",
+      idle: "Chilling", "idle-2": "Chilling", "idle-3": "Chilling", "idle-4": "Chilling", "idle-5": "Chilling", "idle-6": "Chilling", "idle-7": "Chilling", "idle-8": "Chilling", "idle-vibing": "Vibing", "idle-sleepy": "Sleepy",
+      "idle-coffee": "Coffee", "idle-coffee-2": "Coffee", "idle-stargazing": "Stargazing",
       "idle-stretching": "Stretching", "idle-dancing": "Dancing",
       "idle-butterfly": "Wondering", "idle-juggling": "Juggling",
       "idle-rainbow": "Rainbow", "idle-meditation": "Meditating",
@@ -2976,8 +2976,8 @@
     };
     // Map state → which skill key to show level for (null = pet level)
     const STATE_SKILL_KEY = {
-      idle: null, "idle-vibing": null, "idle-sleepy": null,
-      "idle-coffee": null, "idle-stargazing": null,
+      idle: null, "idle-2": null, "idle-3": null, "idle-4": null, "idle-5": null, "idle-6": null, "idle-7": null, "idle-8": null, "idle-vibing": null, "idle-sleepy": null,
+      "idle-coffee": null, "idle-coffee-2": null, "idle-stargazing": null,
       "idle-stretching": "stretching", "idle-dancing": "dancing",
       "idle-butterfly": "wondering", "idle-juggling": "juggling",
       "idle-rainbow": "rainbow", "idle-meditation": "meditating",
@@ -3092,6 +3092,15 @@
             <animate attributeName="d" values="M10,5 Q11,1 12,5;M10,2 Q11,-2 12,2;M10,5 Q11,1 12,5" dur="2.5s" repeatCount="indefinite"/>
           </path>
         </svg>`,
+        particles: {
+          items: [SVG.cloud("#dfe6e9"), SVG.cloud("#b2bec3"), SVG.sparkle("#795548")],
+          anim: "sway-float", rate: 1400,
+        },
+      },
+
+      "idle-coffee-2": {
+        label: "coffee break",
+        accessory: null,
         particles: {
           items: [SVG.cloud("#dfe6e9"), SVG.cloud("#b2bec3"), SVG.sparkle("#795548")],
           anim: "sway-float", rate: 1400,
@@ -4012,7 +4021,7 @@
     };
 
     // ── IDLE MOOD CYCLING ─────────────────────────────────────────
-    const IDLE_VARIANTS = ["idle", "idle-vibing", "idle-sleepy", "idle-coffee", "idle-stargazing"];
+    const IDLE_VARIANTS = ["idle", "idle-2", "idle-3", "idle-4", "idle-5", "idle-6", "idle-7", "idle-8", "idle-vibing", "idle-sleepy", "idle-coffee", "idle-coffee-2", "idle-stargazing"];
     const RARE_IDLE_VARIANTS = [
       { key: "idle-stretching", chance: 0.08 },
       { key: "idle-dancing",    chance: 0.08 },

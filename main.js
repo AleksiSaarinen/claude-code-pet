@@ -493,18 +493,28 @@ function loadSelectedCharacter() {
   } catch (e) { /* use default */ }
 }
 
+let savedWindowPos = null; // { x, y } restored from settings
+
 function loadSettings() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
       if (data.windowSize && WINDOW_SIZES[data.windowSize]) windowSize = data.windowSize;
+      if (data.windowPos && typeof data.windowPos.x === "number" && typeof data.windowPos.y === "number") {
+        savedWindowPos = data.windowPos;
+      }
     }
   } catch (e) { /* use defaults */ }
 }
 
 function saveSettings() {
   try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ windowSize }, null, 2));
+    const obj = { windowSize };
+    if (win && !win.isDestroyed()) {
+      const b = win.getBounds();
+      obj.windowPos = { x: b.x, y: b.y };
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(obj, null, 2));
   } catch (e) { /* ignore */ }
 }
 
@@ -676,12 +686,14 @@ function applyWindowSize(size) {
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const sz = WINDOW_SIZES[windowSize] || WINDOW_SIZES.normal;
+  const startX = savedWindowPos ? savedWindowPos.x : width - sz.w - 20;
+  const startY = savedWindowPos ? savedWindowPos.y : height - sz.h - 20;
 
   win = new BrowserWindow({
     width: sz.w,
     height: sz.h,
-    x: width - sz.w - 20,
-    y: height - sz.h - 20,
+    x: startX,
+    y: startY,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -695,9 +707,11 @@ function createWindow() {
   });
 
   win.loadFile("pet.html");
-  win.webContents.openDevTools({ mode: "detach" });
   win.setAlwaysOnTop(true, "screen-saver");
   win.setIgnoreMouseEvents(false);
+
+  // Save position whenever the window is moved (covers native -webkit-app-region drag)
+  win.on("moved", () => { saveSettings(); });
 
   // Apply saved character once renderer is ready
   win.webContents.on("did-finish-load", () => {
@@ -1041,6 +1055,7 @@ app.whenReady().then(() => {
   });
   ipcMain.on("stop-window-drag", () => {
     if (dragInterval) { clearInterval(dragInterval); dragInterval = null; }
+    saveSettings();
   });
 
   // Auto-setup hooks on launch
@@ -1075,6 +1090,7 @@ function writeStatus(s) {
 }
 
 app.on("before-quit", () => {
+  saveSettings();
   progression.shutdown();
 });
 

@@ -3050,6 +3050,13 @@
         accessory: null,
         particles: null,
       },
+      "idle-2": { label: "chilling...", accessory: null, particles: null },
+      "idle-3": { label: "chilling...", accessory: null, particles: null },
+      "idle-4": { label: "chilling...", accessory: null, particles: null },
+      "idle-5": { label: "chilling...", accessory: null, particles: null },
+      "idle-6": { label: "chilling...", accessory: null, particles: null },
+      "idle-7": { label: "chilling...", accessory: null, particles: null },
+      "idle-8": { label: "chilling...", accessory: null, particles: null },
 
       "idle-vibing": {
         label: "vibing~",
@@ -4077,7 +4084,7 @@
 
     function startIdleCycle() {
       stopIdleCycle();
-      idleCycleIndex = 0;
+      idleCycleIndex = Math.floor(Math.random() * IDLE_VARIANTS.length);
       applyIdleMood();
       idleCycleTimer = setInterval(() => {
         idleCycleIndex = (idleCycleIndex + 1) % IDLE_VARIANTS.length;

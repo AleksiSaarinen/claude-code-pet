@@ -1,5 +1,7 @@
 # Claude Code Pet - Dev Notes
 
+> **Keep this file current.** Update CLAUDE.md (and `~/.claude/projects/.../memory/MEMORY.md`) whenever making non-trivial changes — new patterns, platform gotchas, architectural decisions — before committing.
+
 ## Sprite Sheet Character System
 - **pet.html**: `SpriteRenderer` class (canvas-based), `set-character` IPC handler, sprite-mode CSS
 - **main.js**: `discoverCharacters()`, `buildCharacterSubmenu()`, character persistence in `selected-character.json`

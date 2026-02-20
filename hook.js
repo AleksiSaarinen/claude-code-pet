@@ -8,15 +8,16 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const appData =
-  process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-const STATUS_FILE = path.join(
-  appData,
-  "claude-code-pet",
-  "claude-pet-status.txt"
-);
-
-const LOG_FILE = path.join(appData, "claude-code-pet", "hook-debug.log");
+function getUserDataDir() {
+  if (process.platform === "win32")
+    return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "claude-code-pet");
+  if (process.platform === "darwin")
+    return path.join(os.homedir(), "Library", "Application Support", "claude-code-pet");
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "claude-code-pet");
+}
+const dataDir = getUserDataDir();
+const STATUS_FILE = path.join(dataDir, "claude-pet-status.txt");
+const LOG_FILE = path.join(dataDir, "hook-debug.log");
 
 // Ensure directory exists
 try {

@@ -66,5 +66,17 @@ Never use `taskkill /IM electron.exe` — it doesn't work reliably. Never run `n
 - CSS `html/body { width:100%; height:100% }` so they fill the actual window; `transform: scale()` on `.scene` for upscaling
 - `set-scale` IPC sent AFTER `setBounds` settles (80ms delay) to avoid Chromium compositor race
 
+## Cross-Platform Support
+The app runs on Windows, macOS, and Linux. Key platform notes:
+
+- **Status file paths** — `hook.js`, `set-status.js`, `watcher.js` all use `getUserDataDir()` which returns:
+  - Windows: `%APPDATA%\claude-code-pet`
+  - macOS: `~/Library/Application Support/claude-code-pet`
+  - Linux: `~/.config/claude-code-pet` (or `$XDG_CONFIG_HOME/claude-code-pet`)
+  - This matches exactly what Electron's `app.getPath("userData")` returns on each platform
+- **macOS**: `app.dock.hide()` keeps the app tray-only (no Dock icon)
+- **Linux**: `enable-transparent-visuals` Chromium switch required for compositor transparency
+- **Build scripts**: `npm run build` (current OS), `build:win`, `build:mac`, `build:linux`
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

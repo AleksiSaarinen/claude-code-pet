@@ -986,6 +986,12 @@ function buildTrayMenu(hooksActive) {
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
 
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("enable-transparent-visuals");
+}
+
+if (process.platform === "darwin" && app.dock) app.dock.hide();
+
 app.whenReady().then(() => {
   if (IS_HOOK_MODE) return; // Hook runner handles everything above
 

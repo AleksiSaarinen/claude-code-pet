@@ -6,7 +6,10 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
     "set-idle": "node set-status.js idle",
     "set-thinking": "node set-status.js thinking",
     "set-coding": "node set-status.js coding",
@@ -28,6 +31,16 @@
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": true
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "icon.png",
+      "category": "Utility"
     },
     "files": [
       "main.js",

@@ -7,8 +7,15 @@ const fs = require("fs");
 const path = require("path");
 
 // Match the path Electron uses for userData
-const appData = process.env.APPDATA || path.join(require("os").homedir(), "AppData", "Roaming");
-const statusFile = path.join(appData, "claude-code-pet", "claude-pet-status.txt");
+const os = require("os");
+function getUserDataDir() {
+  if (process.platform === "win32")
+    return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "claude-code-pet");
+  if (process.platform === "darwin")
+    return path.join(os.homedir(), "Library", "Application Support", "claude-code-pet");
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "claude-code-pet");
+}
+const statusFile = path.join(getUserDataDir(), "claude-pet-status.txt");
 
 const status = process.argv[2] || "idle";
 const valid = ["idle", "thinking", "coding", "success", "error"];

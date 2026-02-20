@@ -32,7 +32,29 @@ function log(msg) {
   } catch (e) {}
 }
 
-// When required by main.js (hook runner mode), only export classifyTool.
+// ── Context Extraction ─────────────────────────────────────────────────────
+// Pulls useful details from the hook input for speech bubbles in the UI.
+// Keeps the output small — only fields that are actually present.
+
+function extractContext(hookEvent, data) {
+  const tool = data.tool_name || null;
+  const input = data.tool_input || {};
+  const ctx = { event: hookEvent };
+
+  if (tool) ctx.tool = tool;
+  if (input.file_path) ctx.file = input.file_path;
+  if (input.path) ctx.file = ctx.file || input.path;
+  if (input.command) ctx.command = input.command;
+  if (input.description) ctx.description = input.description;
+  if (input.pattern) ctx.query = input.pattern;
+  if (input.regex) ctx.query = ctx.query || input.regex;
+  if (input.query) ctx.query = ctx.query || input.query;
+  if (data.tool_error) ctx.error = String(data.tool_error).substring(0, 200);
+
+  return ctx;
+}
+
+// When required by main.js (hook runner mode), only export classifyTool + extractContext.
 // When run directly (standalone), handle stdin and write status file.
 if (require.main === module) {
   const hookEvent = process.argv[2];
@@ -76,7 +98,8 @@ if (require.main === module) {
 
     if (status) {
       try {
-        fs.writeFileSync(STATUS_FILE, status);
+        const context = extractContext(hookEvent, data);
+        fs.writeFileSync(STATUS_FILE, JSON.stringify({ status, context }));
       } catch (e) {
         // ignore write errors - don't block Claude Code
       }
@@ -84,7 +107,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classifyTool };
+module.exports = { classifyTool, extractContext };
 
 // ── Tool Classification ─────────────────────────────────────────────────────
 // Maps Claude Code tool usage to granular pet animation keywords.

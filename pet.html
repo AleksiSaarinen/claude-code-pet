@@ -2323,6 +2323,64 @@
     50% { transform: translateY(10px) translateX(8px); }
     100% { opacity: 0; transform: translateY(-25px) translateX(-5px); }
   }
+
+  /* ── SPEECH BUBBLE ── */
+  .speech-bubble {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.93);
+    border: 1.5px solid #e0dfe4;
+    border-radius: 14px;
+    padding: 5px 12px;
+    font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    font-size: 10.5px;
+    color: #2d3436;
+    max-width: 175px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transform-origin: bottom center;
+  }
+
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 7px solid rgba(255, 255, 255, 0.93);
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05));
+  }
+
+  .speech-bubble.visible {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+    animation: speech-pop 0.25s ease-out;
+  }
+
+  .speech-bubble.fading {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.95);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  @keyframes speech-pop {
+    0% { transform: translateX(-50%) scale(0.7); opacity: 0; }
+    60% { transform: translateX(-50%) scale(1.05); }
+    100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  }
 </style>
 <script type="importmap">
 {
@@ -2344,6 +2402,9 @@
 <body>
   <div class="scene" id="scene">
     <div class="status-label" id="statusLabel">idle</div>
+    <div class="speech-bubble" id="speechBubble">
+      <span class="speech-text"></span>
+    </div>
     <div class="creature" id="creature">
       <canvas id="spriteCanvas" class="sprite-canvas" width="120" height="120"></canvas>
       <video id="videoRenderer" class="video-renderer" width="240" height="240" muted playsinline></video>
@@ -3034,6 +3095,812 @@
       // dust puff
       dust: (c) => `<svg width="12" height="8" viewBox="0 0 12 8"><circle cx="3" cy="5" r="2.5" fill="${c}" opacity="0.5"/><circle cx="7" cy="4" r="3" fill="${c}" opacity="0.4"/><circle cx="10" cy="5" r="2" fill="${c}" opacity="0.3"/></svg>`,
     };
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SPEECH BUBBLE SYSTEM
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function shorten(s, max) {
+      if (!s) return "";
+      return s.length > max ? s.substring(0, max - 1) + "\u2026" : s;
+    }
+
+    function speechBasename(filepath) {
+      if (!filepath) return null;
+      return filepath.replace(/\\/g, "/").split("/").pop();
+    }
+
+    function speechExtname(filepath) {
+      const name = speechBasename(filepath);
+      if (!name || !name.includes(".")) return null;
+      return name.split(".").pop().toLowerCase();
+    }
+
+    function getHour() {
+      return new Date().getHours();
+    }
+
+    function isLateNight() { const h = getHour(); return h >= 23 || h < 5; }
+    function isEarlyMorning() { const h = getHour(); return h >= 5 && h < 8; }
+    function isEvening() { const h = getHour(); return h >= 18 && h < 23; }
+
+    const SPEECH = {
+      coding: {
+        generic: [
+          "Time to code!",
+          "Let's build something cool",
+          "Fingers on keyboard...",
+          "In the zone",
+          "Making magic happen",
+          "Code go brrr",
+          "Writing some logic...",
+          "Tappity tap tap",
+          "Creating stuff!",
+          "Crafting code...",
+          "Building away...",
+          "Hack hack hack",
+          "Flow state: activated",
+          "Let's do this!",
+          "Making things happen",
+          "Working on it...",
+          "Coding away~",
+          "Another file, another function",
+          "The code writes itself... kinda",
+          "Here we go!",
+          "Getting creative",
+          "Adding some spice to the codebase",
+          "Trust the process",
+          "One line at a time",
+          "In my coding era",
+        ],
+        withFile: function(f) {
+          const name = speechBasename(f);
+          const ext = speechExtname(f);
+          const msgs = [
+            `Editing ${name}...`,
+            `Working on ${name}`,
+            `Touching up ${name}`,
+            `${name} needs some love`,
+            `Let's fix up ${name}`,
+            `Tweaking ${name}...`,
+          ];
+          if (ext === "css" || ext === "scss" || ext === "less") {
+            msgs.push("CSS time... pray for me");
+            msgs.push("Centering a div again?");
+            msgs.push("!important? Never!");
+            msgs.push("CSS is a lifestyle");
+            msgs.push(`Styling ${name}... beautifully`);
+          }
+          if (ext === "test" || ext === "spec" || (name && name.includes("test"))) {
+            msgs.push("Writing tests? Responsible!");
+            msgs.push("Test-driven vibes");
+            msgs.push("Making things reliable!");
+            msgs.push("Future you will thank you");
+          }
+          if (name === "package.json") {
+            msgs.push("Careful with that one...");
+            msgs.push("The sacred package.json");
+            msgs.push("Dependencies incoming!");
+          }
+          if (name && (name.includes("README") || name.includes("readme"))) {
+            msgs.push("Documentation! A rare sight");
+            msgs.push("README update? How thoughtful");
+            msgs.push("Someone reads these, right?");
+          }
+          if (ext === "json" || ext === "yaml" || ext === "yml" || ext === "toml") {
+            msgs.push("Config files... fun times");
+            msgs.push("One wrong comma and everything breaks");
+          }
+          if (ext === "ts" || ext === "tsx") {
+            msgs.push("TypeScript FTW!");
+            msgs.push("Types make the world go round");
+          }
+          if (ext === "py") {
+            msgs.push("Python time!");
+            msgs.push("Indentation matters...");
+            msgs.push("import antigravity");
+          }
+          if (ext === "rs") {
+            msgs.push("Rust! The borrow checker awaits");
+            msgs.push("Fighting the borrow checker...");
+            msgs.push("Fearless concurrency!");
+          }
+          if (ext === "go") {
+            msgs.push("Go go go!");
+            msgs.push("if err != nil... again");
+          }
+          if (ext === "env" || (name && name.startsWith(".env"))) {
+            msgs.push("Shhh... secrets!");
+            msgs.push("Don't commit this one!");
+          }
+          if (ext === "sql") {
+            msgs.push("SELECT * FROM motivation");
+            msgs.push("Database magic");
+          }
+          if (ext === "md") {
+            msgs.push("Markdown master at work");
+          }
+          if (name === "index.html" || name === "index.tsx" || name === "index.js") {
+            msgs.push("The front door of the app");
+          }
+          if (name && name.includes("middleware")) {
+            msgs.push("Middleware? Fancy!");
+          }
+          if (name && (name.includes("auth") || name.includes("login"))) {
+            msgs.push("Security matters!");
+            msgs.push("Auth is always fun... right?");
+          }
+          if (name && name.includes("migration")) {
+            msgs.push("Database migration time!");
+            msgs.push("ALTER TABLE... carefully");
+          }
+          return msgs;
+        },
+        withCommand: function(cmd) {
+          if (cmd.includes("git commit")) return ["Committing! Ship it!"];
+          if (cmd.includes("git add")) return ["Staging changes..."];
+          if (cmd.includes("git stash")) return ["Stashing for later..."];
+          if (cmd.includes("git merge")) return ["Merge time... fingers crossed"];
+          if (cmd.includes("git rebase")) return ["Rebasing... hold tight"];
+          if (cmd.includes("git checkout") || cmd.includes("git switch")) return ["Switching branches!"];
+          if (cmd.includes("git diff")) return ["Let's see what changed..."];
+          if (cmd.includes("git log")) return ["Reading the history books"];
+          return null;
+        },
+        rare: [
+          "I am one with the code",
+          "This is my magnum opus",
+          "Picasso had paint, I have code",
+          "Today's bug is tomorrow's feature",
+          "10x developer energy",
+          "Coffee + code = bliss",
+          "We're in the matrix now",
+          "The code chose me",
+        ],
+      },
+
+      thinking: {
+        generic: [
+          "Hmm, let me think...",
+          "Processing...",
+          "Big brain time",
+          "Pondering the universe",
+          "Hold on, thinking...",
+          "Calculating...",
+          "Contemplating life choices",
+          "Running the numbers...",
+          "Let me figure this out",
+          "Deep in thought...",
+          "Considering the possibilities",
+          "Hmmmmm...",
+          "Give me a sec...",
+          "Analyzing the situation",
+          "Brain.exe is running",
+          "Neurons firing...",
+          "Working on a plan...",
+          "Almost got it...",
+          "Connecting the dots...",
+          "Thinking thinking thinking",
+          "Let me cook...",
+          "Loading genius idea...",
+          "The gears are turning",
+        ],
+        rare: [
+          "What if we just... no wait",
+          "I think I see the answer!",
+          "This is a tricky one...",
+          "My brain has buffered",
+          "Consulting the ancient scrolls",
+          "Summoning brain cells",
+          "404: Solution not found... yet",
+          "Plot twist incoming",
+        ],
+      },
+
+      success: {
+        generic: [
+          "Done!",
+          "Nailed it!",
+          "All good!",
+          "Mission accomplished",
+          "Easy peasy",
+          "And that's a wrap!",
+          "Boom. Done.",
+          "Another one bites the dust",
+          "Task complete!",
+          "Victory!",
+          "Crushed it!",
+          "That went well!",
+          "Clean execution",
+          "Smooth sailing",
+          "Like a boss",
+          "GG!",
+          "*chef's kiss*",
+          "Flawless",
+          "And the crowd goes wild!",
+        ],
+        rare: [
+          "I'm basically a genius",
+          "Was there ever any doubt?",
+          "Too easy!",
+          "My greatest work yet",
+          "Someone give me a medal",
+          "We do not simply ship \u2014 we DEPLOY",
+          "Mic drop",
+        ],
+      },
+
+      error: {
+        generic: [
+          "Uh oh...",
+          "That didn't go well",
+          "Error! Don't panic",
+          "Oops. Let me try again",
+          "Well that's not ideal",
+          "Houston, we have a problem",
+          "Hmm, that broke",
+          "This is fine. Everything is fine.",
+          "Bruh.",
+          "We'll get 'em next time",
+          "Task failed successfully?",
+          "It's not a bug, it's a feature",
+          "Time for plan B",
+          "Let's pretend that didn't happen",
+          "Whoopsie daisy",
+          "Back to the drawing board",
+          "That was... unexpected",
+          "Welp.",
+          "Error 418: I'm a teapot",
+        ],
+        withError: function(err) {
+          const short = shorten(err, 35);
+          return [
+            `Hmm: ${short}`,
+            `Oops \u2014 ${short}`,
+            `That failed: ${short}`,
+          ];
+        },
+        rare: [
+          "My code is perfect, the computer is wrong",
+          "Have you tried turning it off and on?",
+          "Somebody call Stack Overflow",
+          "I blame cosmic rays",
+          "Works on my machine \xAF\\_(\u30C4)_/\xAF",
+          "The code is revolting against us",
+        ],
+      },
+
+      searching: {
+        generic: [
+          "Looking for something...",
+          "Where is it...",
+          "Searching...",
+          "Hunting for clues",
+          "Let me find that...",
+          "Scanning the codebase",
+          "Like finding a needle in a haystack",
+          "It's here somewhere...",
+          "Detective mode",
+          "Searching high and low",
+          "Rummaging through files...",
+          "Where'd it go?",
+          "Seek and ye shall find",
+        ],
+        withQuery: function(q) {
+          const short = shorten(q, 22);
+          return [
+            `Searching for "${short}"`,
+            `Looking for ${short}...`,
+            `Where's ${short}?`,
+            `Grep grep grep: ${short}`,
+            `Hunting for ${short}`,
+          ];
+        },
+        withFile: function(f) {
+          return [
+            `Searching in ${speechBasename(f)}...`,
+            `Scanning ${speechBasename(f)}...`,
+          ];
+        },
+        rare: [
+          "I'll find it if it's the last thing I do",
+          "The truth is out there",
+          "We're gonna need a bigger grep",
+          "Found it! Oh wait, no...",
+        ],
+      },
+
+      reading: {
+        generic: [
+          "Reading time",
+          "Let me take a look...",
+          "Studying the code...",
+          "Understanding the lay of the land",
+          "Reading through this...",
+          "Taking notes...",
+          "Hmm interesting...",
+          "Learning the codebase",
+          "Page by page...",
+          "Absorbing knowledge",
+          "Context loading...",
+          "Let me see here...",
+        ],
+        withFile: function(f) {
+          const name = speechBasename(f);
+          const ext = speechExtname(f);
+          const msgs = [
+            `Reading ${name}...`,
+            `Checking out ${name}`,
+            `What's in ${name}?`,
+            `Studying ${name}`,
+            `Looking at ${name}...`,
+          ];
+          if (ext === "md") msgs.push("Reading the docs, as one does");
+          if (name === "package.json") msgs.push("Checking dependencies...");
+          if (name === ".gitignore") msgs.push("What are we ignoring?");
+          if (name && name.includes("config")) msgs.push("Configs tell a story...");
+          if (name && name.includes("log")) msgs.push("Reading the tea leaves (logs)");
+          return msgs;
+        },
+        rare: [
+          "This code has seen some things",
+          "Who wrote this?! Oh wait...",
+          "Reading between the lines",
+          "This is some quality code!",
+          "Hmm, I have questions...",
+        ],
+      },
+
+      testing: {
+        generic: [
+          "Running tests...",
+          "Please pass, please pass...",
+          "Test time!",
+          "Moment of truth",
+          "Green or red?",
+          "Testing 1, 2, 3...",
+          "Will it blend?",
+          "Fingers crossed!",
+          "The tests will decide your fate",
+          "All green? ALL GREEN??",
+          "Running the gauntlet",
+          "Quality assurance time",
+          "Let's see if this works...",
+        ],
+        withCommand: function(cmd) {
+          const c = cmd.toLowerCase();
+          if (c.includes("jest")) return ["Jest is running!", "Jest do it"];
+          if (c.includes("pytest")) return ["pytest go brrr", "Python tests running"];
+          if (c.includes("vitest")) return ["Vitest ftw!", "Lightning fast tests"];
+          if (c.includes("mocha")) return ["Mocha tests brewing..."];
+          if (c.includes("cargo test")) return ["Rust tests: no fear!", "cargo test... let's go"];
+          if (c.includes("go test")) return ["Go tests running!"];
+          return null;
+        },
+        rare: [
+          "100% code coverage? In this economy?",
+          "Tests don't lie. Usually.",
+          "Red. Green. Refactor. Repeat.",
+          "If the tests pass, ship it!",
+          "TDD gang rise up",
+        ],
+      },
+
+      installing: {
+        generic: [
+          "Installing packages...",
+          "npm install... brb",
+          "Adding dependencies",
+          "Downloading the internet",
+          "node_modules grows heavier...",
+          "Package time!",
+          "Installing stuff...",
+          "Just a few more megabytes...",
+          "The dependency tree expands",
+          "More packages!",
+        ],
+        withCommand: function(cmd) {
+          const patterns = [
+            /(?:npm install|npm i|yarn add|pnpm add|bun add|pip install|cargo add|brew install|apt install)\s+(\S+)/i,
+          ];
+          for (const p of patterns) {
+            const m = cmd.match(p);
+            if (m) {
+              const pkg = m[1].replace(/^-+/, "");
+              if (pkg && !pkg.startsWith("-")) {
+                return [
+                  `Installing ${pkg}...`,
+                  `Adding ${pkg} to the mix`,
+                  `${pkg} coming right up!`,
+                ];
+              }
+            }
+          }
+          if (cmd.includes("npm install") && !cmd.includes(" -")) {
+            return [
+              "npm install... grab a coffee",
+              "Restoring all the deps...",
+              "npm install goes brrr",
+            ];
+          }
+          return null;
+        },
+        rare: [
+          "I need ALL the packages",
+          "One does not simply npm install quickly",
+          "Is this dependency really necessary? Yes. Yes it is.",
+          "node_modules: the black hole of disk space",
+        ],
+      },
+
+      debugging: {
+        generic: [
+          "Bug hunt!",
+          "Where's the bug...",
+          "Detective mode activated",
+          "It's always a missing semicolon",
+          "console.log to the rescue",
+          "Squashing bugs",
+          "Following the trail...",
+          "The plot thickens",
+          "Why doesn't this work??",
+          "Let me inspect this...",
+          "Debugging time!",
+          "Something's off here...",
+          "Time to investigate",
+          "Where art thou, bug?",
+        ],
+        rare: [
+          "It was a typo. It's ALWAYS a typo.",
+          "The bug was inside me all along",
+          "I've been debugging for 3 hours and it was one character",
+          "Rubber duck, lend me your ears",
+          "Print statement debugging is a valid strategy",
+          "Me vs this bug: it's personal now",
+        ],
+      },
+
+      deploying: {
+        generic: [
+          "Deploying!",
+          "Ship it!",
+          "To production we go!",
+          "YOLO deploy",
+          "Pushing to the world",
+          "Release time!",
+          "Launching...",
+          "Prepare for liftoff!",
+          "3... 2... 1... deployed!",
+          "The world awaits our code",
+        ],
+        withCommand: function(cmd) {
+          const c = cmd.toLowerCase();
+          if (c.includes("git push")) return [
+            "Pushing code!",
+            "git push... no going back now",
+            "Pushing to remote!",
+          ];
+          if (c.includes("vercel") || c.includes("netlify")) return ["Deploying to the cloud!"];
+          if (c.includes("docker")) return ["Container ship is leaving port!"];
+          if (c.includes("npm publish")) return ["Publishing to npm! Big day!"];
+          return null;
+        },
+        rare: [
+          "Deploy on Friday? I too like to live dangerously",
+          "LGTM, ship it!",
+          "We don't make mistakes, we make deployments",
+          "May the uptime gods smile upon us",
+          "What could possibly go wrong?",
+        ],
+      },
+
+      downloading: {
+        generic: [
+          "Downloading...",
+          "Fetching stuff...",
+          "Grabbing files",
+          "Pulling from the cloud",
+          "Loading...",
+          "Getting data...",
+          "Downloading things!",
+          "wget goes swoosh",
+        ],
+        withCommand: function(cmd) {
+          const c = cmd.toLowerCase();
+          if (c.includes("git clone")) return [
+            "Cloning a repo!",
+            "git clone... new project hype!",
+          ];
+          if (c.includes("curl") || c.includes("wget")) return [
+            "Fetching from the internet...",
+            "Downloading from the wild web",
+          ];
+          return null;
+        },
+        rare: [
+          "Downloading more RAM...",
+          "The internet is a series of tubes",
+        ],
+      },
+
+      cooking: {
+        generic: [
+          "Building...",
+          "Compiling!",
+          "Cook cook cook",
+          "Baking the code...",
+          "Bundling up...",
+          "Making something great",
+          "Build in progress...",
+          "Assembling the pieces",
+          "Crunching...",
+          "Transpiling away",
+        ],
+        withCommand: function(cmd) {
+          const c = cmd.toLowerCase();
+          if (c.includes("webpack")) return ["Webpack is thinking... slowly"];
+          if (c.includes("vite")) return ["Vite go zoom!"];
+          if (c.includes("tsc")) return ["TypeScript compilation..."];
+          if (c.includes("cargo build")) return ["Rustacean building time!"];
+          if (c.includes("docker build")) return ["Building a container!"];
+          return null;
+        },
+        rare: [
+          "Compilation: the original coffee break",
+          "Watching the progress bar... riveting",
+          "It's compiling \u2014 I'm legally allowed to goof off",
+        ],
+      },
+
+      deleting: {
+        generic: [
+          "Cleaning up!",
+          "Out with the old",
+          "Bye bye files",
+          "Spring cleaning",
+          "Decluttering...",
+          "Marie Kondo mode",
+          "Removing the cruft",
+          "Trimming the fat",
+          "Deleting stuff...",
+          "Less is more!",
+        ],
+        withCommand: function(cmd) {
+          if (cmd.includes("node_modules")) return [
+            "Nuking node_modules! Freedom!",
+            "rm -rf node_modules... the ritual",
+          ];
+          if (cmd.includes("cache") || cmd.includes("clean")) return [
+            "Clearing the cache!",
+            "Fresh start!",
+          ];
+          return null;
+        },
+        rare: [
+          "The best code is no code",
+          "Deleting code is therapeutic",
+          "Every line deleted is a line that can't have bugs",
+          "Sparking joy? No? DELETED.",
+        ],
+      },
+
+      idle: {
+        generic: [
+          "Chillin'...",
+          "Just vibing",
+          "Waiting for action",
+          "Twiddling my pixels",
+          "*yawn*",
+          "Zzz...",
+          "Anyone there?",
+          "I could use a task...",
+          "Standing by!",
+          "Ready when you are",
+          "Taking a breather",
+          "Enjoying the silence",
+          "Contemplating existence",
+          "Loading motivation...",
+          "AFK?",
+          "Is it snack time?",
+        ],
+        rare: [
+          "I wonder what the meaning of code is",
+          "To ship or not to ship...",
+          "I'm not sleeping, I'm optimizing!",
+          "My idle animation is my cardio",
+          "Waiting for inspiration to strike",
+          "Do pixels dream of electric sheep?",
+        ],
+      },
+    };
+
+    const TIME_MESSAGES = {
+      lateNight: [
+        "Late night coding session!",
+        "Burning the midnight oil...",
+        "The bugs come out at night",
+        "Sleep is overrated... right?",
+        "Night owl energy",
+        "Is it tomorrow yet?",
+        "3 AM code hits different",
+        "We code at night like vampires",
+      ],
+      earlyMorning: [
+        "Early bird gets the merge!",
+        "Morning productivity!",
+        "Rise and code!",
+        "Fresh morning, fresh code",
+        "Coffee first, bugs later",
+      ],
+      evening: [
+        "Evening coding session",
+        "Winding down... or starting up?",
+        "One more feature before bed...",
+        "PM productivity boost",
+      ],
+    };
+
+    const STREAK_MESSAGES = {
+      coding: {
+        3: ["On a roll!", "Typing machine!", "Can't stop won't stop"],
+        5: ["5th file! You're on fire!", "Coding marathon!", "Unstoppable!"],
+        8: ["Are you even human?!", "Machine-level productivity", "Legendary streak!"],
+      },
+      thinking: {
+        3: ["Still thinking... it's a big one", "Deep thoughts...", "Extra processing needed"],
+        5: ["That's a LOT of thinking", "Philosophy major vibes", "The answer will come..."],
+      },
+      searching: {
+        3: ["Still searching...", "It's gotta be here somewhere", "Persistent!"],
+        5: ["You've been searching a while...", "Don't give up!", "The hunt continues"],
+      },
+      error: {
+        2: ["Again?!", "Another one??", "Oh no, not again"],
+        3: ["Third time's a charm... right?", "Errors on errors", "Maybe try something different?"],
+        5: ["I believe in you!", "It WILL work eventually", "Persistence is a virtue"],
+      },
+    };
+
+    const speechBubble = document.getElementById("speechBubble");
+    const speechText = speechBubble.querySelector(".speech-text");
+    let speechTimer = null;
+    let speechCooldown = false;
+    let lastSpeechMessage = null;
+    let speechEnabled = true;
+    let stateStreak = { state: null, count: 0 };
+    let totalSpeechCount = 0;
+
+    const SPEECH_DURATION = 3500;
+    const SPEECH_COOLDOWN = 5000;
+    const SPEECH_CHANCE = 0.70;
+    const RARE_CHANCE = 0.15;
+    const TIME_CHANCE = 0.12;
+    const STREAK_CHANCE = 0.50;
+    const IDLE_SPEECH_INTERVAL = 25000;
+    const IDLE_SPEECH_CHANCE = 0.30;
+
+    let idleSpeechTimer = null;
+
+    function generateSpeechMessage(status, context) {
+      context = context || {};
+      const pool = SPEECH[status];
+      if (!pool) return null;
+
+      if (status === stateStreak.state) {
+        stateStreak.count++;
+      } else {
+        stateStreak = { state: status, count: 1 };
+      }
+
+      const streaks = STREAK_MESSAGES[status];
+      if (streaks && Math.random() < STREAK_CHANCE) {
+        const thresholds = Object.keys(streaks).map(Number).sort((a, b) => b - a);
+        for (const t of thresholds) {
+          if (stateStreak.count >= t) {
+            return pick(streaks[t]);
+          }
+        }
+      }
+
+      if (Math.random() < TIME_CHANCE) {
+        if (isLateNight() && TIME_MESSAGES.lateNight.length) return pick(TIME_MESSAGES.lateNight);
+        if (isEarlyMorning() && TIME_MESSAGES.earlyMorning.length) return pick(TIME_MESSAGES.earlyMorning);
+        if (isEvening() && TIME_MESSAGES.evening.length) return pick(TIME_MESSAGES.evening);
+      }
+
+      if (pool.rare && Math.random() < RARE_CHANCE) {
+        return pick(pool.rare);
+      }
+
+      if (context.error && pool.withError) {
+        const msgs = pool.withError(context.error);
+        if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+      }
+      if (context.command && pool.withCommand) {
+        const msgs = pool.withCommand(context.command);
+        if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+      }
+      if (context.file && pool.withFile) {
+        const msgs = pool.withFile(context.file);
+        if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+      }
+      if (context.query && pool.withQuery) {
+        const msgs = pool.withQuery(context.query);
+        if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+      }
+
+      return pick(pool.generic);
+    }
+
+    function showSpeechBubble(message) {
+      if (!message || !speechEnabled) return;
+      if (speechCooldown) return;
+      if (Math.random() > SPEECH_CHANCE) return;
+      if (message === lastSpeechMessage) return;
+
+      lastSpeechMessage = message;
+      totalSpeechCount++;
+
+      if (speechTimer) clearTimeout(speechTimer);
+
+      speechText.textContent = message;
+      speechBubble.classList.remove("fading");
+      speechBubble.classList.add("visible");
+
+      speechTimer = setTimeout(() => {
+        speechBubble.classList.add("fading");
+        setTimeout(() => {
+          speechBubble.classList.remove("visible", "fading");
+        }, 500);
+      }, SPEECH_DURATION);
+
+      speechCooldown = true;
+      setTimeout(() => { speechCooldown = false; }, SPEECH_COOLDOWN);
+    }
+
+    function showSpeechForced(message) {
+      if (!message || !speechEnabled) return;
+      lastSpeechMessage = message;
+      if (speechTimer) clearTimeout(speechTimer);
+      speechText.textContent = message;
+      speechBubble.classList.remove("fading");
+      speechBubble.classList.add("visible");
+      speechTimer = setTimeout(() => {
+        speechBubble.classList.add("fading");
+        setTimeout(() => speechBubble.classList.remove("visible", "fading"), 500);
+      }, SPEECH_DURATION + 1000);
+    }
+
+    function startIdleSpeech() {
+      stopIdleSpeech();
+      idleSpeechTimer = setInterval(() => {
+        if (currentState.startsWith("idle") && speechEnabled && Math.random() < IDLE_SPEECH_CHANCE) {
+          const msg = generateSpeechMessage("idle", {});
+          if (msg && msg !== lastSpeechMessage) {
+            lastSpeechMessage = msg;
+            if (speechTimer) clearTimeout(speechTimer);
+            speechText.textContent = msg;
+            speechBubble.classList.remove("fading");
+            speechBubble.classList.add("visible");
+            speechTimer = setTimeout(() => {
+              speechBubble.classList.add("fading");
+              setTimeout(() => speechBubble.classList.remove("visible", "fading"), 500);
+            }, SPEECH_DURATION);
+          }
+        }
+      }, IDLE_SPEECH_INTERVAL);
+    }
+
+    function stopIdleSpeech() {
+      if (idleSpeechTimer) { clearInterval(idleSpeechTimer); idleSpeechTimer = null; }
+    }
+
+    // Start idle chatter by default
+    startIdleSpeech();
 
     // ── ANIMATION CONFIG ────────────────────────────────────────────
     // To add a new animation:
@@ -4541,7 +5408,13 @@
 
     // ── IPC ─────────────────────────────────────────────────────────
 
-    ipcRenderer.on("status-change", (e, status) => setState(status));
+    ipcRenderer.on("status-change", (e, status, context) => {
+      setState(status);
+      const msg = generateSpeechMessage(status, context || {});
+      showSpeechBubble(msg);
+      if (status === "idle") startIdleSpeech();
+      else stopIdleSpeech();
+    });
 
     ipcRenderer.on("status-update", (e, data) => {
       if (data.progression) updateProgression(data.progression);
@@ -4549,6 +5422,7 @@
 
     ipcRenderer.on("level-up", (e, data) => {
       celebrateLevelUp(data);
+      showSpeechForced(`Level ${data.level}! I evolved!`);
     });
 
     // ── ACHIEVEMENT TOASTS ──────────────────────────────────────────
@@ -4576,6 +5450,17 @@
     ipcRenderer.on("achievement-unlocked", (e, data) => {
       toastQueue.push(data);
       if (!toastActive) showNextToast();
+      showSpeechForced(`${data.icon} ${data.name}!`);
+    });
+
+    ipcRenderer.on("speech-toggle", (e, enabled) => {
+      speechEnabled = enabled;
+      if (!enabled) {
+        speechBubble.classList.remove("visible", "fading");
+        stopIdleSpeech();
+      } else {
+        if (currentState.startsWith("idle")) startIdleSpeech();
+      }
     });
 
     ipcRenderer.on("set-character", async (e, charInfo) => {

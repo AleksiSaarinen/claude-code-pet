@@ -52,6 +52,7 @@ const WINDOW_SIZES = {
   xlarge: { w: 600, h: 660 },
 };
 let windowSize = "normal";
+let speechBubblesEnabled = true;
 
 // Ensure status file exists
 if (!fs.existsSync(STATUS_FILE)) fs.writeFileSync(STATUS_FILE, "idle");
@@ -62,7 +63,7 @@ if (IS_HOOK_MODE) {
   const hookModulePath = app.isPackaged
     ? path.join(process.resourcesPath, "hook.js")
     : path.join(__dirname, "hook.js");
-  const { classifyTool } = require(hookModulePath);
+  const { classifyTool, extractContext } = require(hookModulePath);
   const hookEvent = process.argv[process.argv.indexOf("--run-hook") + 1];
 
   // Read stdin synchronously — Electron's async stdin doesn't work with pipes
@@ -82,7 +83,10 @@ if (IS_HOOK_MODE) {
   }
 
   if (status) {
-    try { fs.writeFileSync(STATUS_FILE, status); } catch (e) {}
+    try {
+      const context = extractContext(hookEvent, data);
+      fs.writeFileSync(STATUS_FILE, JSON.stringify({ status, context }));
+    } catch (e) {}
   }
   app.exit(0);
 }
@@ -93,6 +97,7 @@ let currentStatus = "idle";
 let lastChangeTime = Date.now();
 let currentIdleVariant = "idle";
 let currentActivityVariant = null;
+let currentContext = {};
 
 // ── Progression System ──────────────────────────────────────────────────────
 
@@ -503,13 +508,14 @@ function loadSettings() {
       if (data.windowPos && typeof data.windowPos.x === "number" && typeof data.windowPos.y === "number") {
         savedWindowPos = data.windowPos;
       }
+      if (data.speechBubblesEnabled !== undefined) speechBubblesEnabled = data.speechBubblesEnabled;
     }
   } catch (e) { /* use defaults */ }
 }
 
 function saveSettings() {
   try {
-    const obj = { windowSize };
+    const obj = { windowSize, speechBubblesEnabled };
     if (win && !win.isDestroyed()) {
       const b = win.getBounds();
       obj.windowPos = { x: b.x, y: b.y };
@@ -722,6 +728,7 @@ function createWindow() {
     console.log('startup — windowSize:', windowSize, 'bounds:', JSON.stringify(win.getBounds()), 'scaleFactor:', disp.scaleFactor, 'zoom:', win.webContents.getZoomFactor());
     win.webContents.executeJavaScript('JSON.stringify({innerW:window.innerWidth,innerH:window.innerHeight,dpr:window.devicePixelRatio})').then(r => console.log('renderer viewport:', r));
     win.webContents.send("set-scale", _sz.w / 200);
+    win.webContents.send("speech-toggle", speechBubblesEnabled);
     if (selectedCharacterId !== "default") {
       const chars = discoverCharacters();
       const selected = chars.find(c => c.id === selectedCharacterId);
@@ -737,14 +744,16 @@ function createWindow() {
   // Watch status file for immediate reaction
   fs.watch(STATUS_FILE, () => {
     try {
-      const status = fs.readFileSync(STATUS_FILE, "utf-8").trim();
+      const { status, context } = readStatusFile();
       if (status !== currentStatus) {
         currentStatus = status;
+        currentContext = context;
         lastChangeTime = Date.now();
         progression.trackStateChange(status);
-        win.webContents.send("status-change", status);
+        win.webContents.send("status-change", status, context);
         win.webContents.send("status-update", {
           status: currentStatus,
+          context: currentContext,
           progression: progression.getState(),
         });
       }
@@ -756,13 +765,14 @@ function createWindow() {
   // Poll every second as backup + handle auto-idle revert + XP ticks
   setInterval(() => {
     try {
-      const status = fs.readFileSync(STATUS_FILE, "utf-8").trim();
+      const { status, context } = readStatusFile();
 
       if (status !== currentStatus) {
         currentStatus = status;
+        currentContext = context;
         lastChangeTime = Date.now();
         progression.trackStateChange(status);
-        win.webContents.send("status-change", status);
+        win.webContents.send("status-change", status, context);
       }
 
       // Award XP for current activity (use variant when active)
@@ -957,6 +967,16 @@ function buildTrayMenu(hooksActive) {
       label: "Character",
       submenu: buildCharacterSubmenu(hooksActive),
     },
+    {
+      label: "Speech Bubbles",
+      type: "checkbox",
+      checked: speechBubblesEnabled,
+      click: (item) => {
+        speechBubblesEnabled = item.checked;
+        win.webContents.send("speech-toggle", speechBubblesEnabled);
+        saveSettings();
+      },
+    },
     { type: "separator" },
     {
       label: "Manual",
@@ -1015,6 +1035,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on("set-window-size", (e, size) => applyWindowSize(size));
+
+  ipcMain.on("get-speech-enabled", (e) => {
+    e.returnValue = speechBubblesEnabled;
+  });
 
   ipcMain.on("switch-character", (e, id) => {
     saveSelectedCharacter(id);
@@ -1091,8 +1115,19 @@ app.whenReady().then(() => {
   setInterval(pollGitStats, 60000);
 });
 
+function readStatusFile() {
+  const raw = fs.readFileSync(STATUS_FILE, "utf-8").trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return { status: parsed.status || raw, context: parsed.context || {} };
+  } catch {
+    // Backward compat: plain string format
+    return { status: raw, context: {} };
+  }
+}
+
 function writeStatus(s) {
-  fs.writeFileSync(STATUS_FILE, s);
+  fs.writeFileSync(STATUS_FILE, JSON.stringify({ status: s, context: {} }));
 }
 
 app.on("before-quit", () => {

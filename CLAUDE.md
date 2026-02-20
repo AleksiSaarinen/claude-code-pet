@@ -80,5 +80,32 @@ The app runs on Windows, macOS, and Linux. Key platform notes:
 - **Linux**: `enable-transparent-visuals` Chromium switch required for compositor transparency
 - **Build scripts**: `npm run build` (current OS), `build:win`, `build:mac`, `build:linux`
 
+## Speech Bubble System
+- **pet.html**: Full speech system (~360+ messages) inline in `<script>`, CSS for `.speech-bubble`
+- **main.js**: `readStatusFile()` parses JSON status, `speechBubblesEnabled` setting, tray toggle, `speech-toggle` IPC
+- **hook.js**: `extractContext()` pulls file/command/query/error from hook data into JSON status file
+
+### Architecture:
+- Status file now writes **JSON**: `{"status":"coding","context":{"tool":"Edit","file":"src/App.tsx"}}`
+- `readStatusFile()` has backward compat for plain string format
+- Context flows: hook.js → status file (JSON) → main.js `readStatusFile()` → `status-change` IPC (status, context) → pet.html `generateSpeechMessage()`
+- `writeStatus()` in main.js also writes JSON format (for manual tray menu triggers)
+
+### Message types:
+- **Generic**: random quips per state (25 for coding, 23 for thinking, etc.)
+- **Context-aware**: `withFile(f)`, `withCommand(cmd)`, `withQuery(q)`, `withError(e)` — file-type humor, package names, git commands
+- **Rare/easter eggs**: 15% chance (`RARE_CHANCE`)
+- **Time-of-day**: late night, early morning, evening (12% chance)
+- **Streak**: same state repeated N times triggers streak messages (50% chance)
+- **Idle ambient**: chatter every 25s when idle (30% chance per tick)
+
+### Key constants:
+- `SPEECH_DURATION = 3500ms`, `SPEECH_COOLDOWN = 5000ms`, `SPEECH_CHANCE = 0.70`
+- `showSpeechForced()` bypasses cooldown/chance — used for level-ups and achievements
+
+### Gotcha — speech bubble positioning:
+- Body has `overflow: hidden` — bubble must stay inside the scene bounds
+- Use `top: 4px; transform: translateX(-50%)` — NOT `translateY(-100%)` which pushes it above the clipped area
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

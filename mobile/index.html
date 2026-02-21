@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Claude Code Pet</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent;
+    font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    color: #e0e0e0;
+  }
+
+  /* ── Collapsed mode ── */
+  .container {
+    width: 150px;
+    height: 165px;
+    position: relative;
+    transition: width 0.3s ease, height 0.3s ease;
+    background: rgba(26, 26, 46, 0.92);
+    border-radius: 20px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .container.expanded {
+    width: 320px;
+    height: 500px;
+    border-radius: 16px;
+  }
+
+  /* ── Pet area ── */
+  .pet-area {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 30px;
+  }
+  .container.expanded .pet-area {
+    padding-top: 8px;
+  }
+
+  #petCanvas {
+    width: 120px;
+    height: 120px;
+    image-rendering: pixelated;
+    cursor: pointer;
+  }
+  .container.expanded #petCanvas {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* ── Status dot ── */
+  .status-dot {
+    position: absolute;
+    top: 32px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e94560;
+    border: 1.5px solid rgba(0,0,0,0.3);
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: #4ade80; }
+  .status-dot.connecting { background: #fbbf24; }
+
+  /* ── Speech bubble ── */
+  .speech-bubble {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.93);
+    border: 1.5px solid #e0dfe4;
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 10px;
+    color: #2d3436;
+    max-width: 145px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+    white-space: normal;
+    word-wrap: break-word;
+    line-height: 1.3;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transform-origin: bottom center;
+  }
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid rgba(255, 255, 255, 0.93);
+  }
+  .speech-bubble.visible {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+    animation: speech-pop 0.25s ease-out;
+  }
+  .speech-bubble.fading {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.95);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  @keyframes speech-pop {
+    0% { transform: translateX(-50%) scale(0.7); opacity: 0; }
+    60% { transform: translateX(-50%) scale(1.05); }
+    100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  }
+
+  /* ── Status label (collapsed) ── */
+  .status-label {
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    margin-top: 2px;
+    text-transform: capitalize;
+  }
+  .container.expanded .status-label { display: none; }
+
+  /* ── Expanded panel ── */
+  .panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    padding: 8px 12px 12px;
+    min-height: 0;
+  }
+  .container.expanded .panel { display: flex; }
+
+  .output-area {
+    flex: 1;
+    background: #0d1117;
+    border-radius: 10px;
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    line-height: 1.5;
+    color: #c9d1d9;
+    margin-bottom: 8px;
+    min-height: 0;
+    word-break: break-word;
+  }
+  .output-area .system-msg { color: #8b949e; font-style: italic; }
+  .output-area .error-msg { color: #f85149; }
+  .output-area .stream-text { color: #e6edf3; }
+  .output-area .tool-msg { color: #d2a8ff; }
+
+  .input-row {
+    display: flex;
+    gap: 6px;
+  }
+  .input-row input {
+    flex: 1;
+    background: #0d1117;
+    border: 1.5px solid #30363d;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: #e6edf3;
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+  }
+  .input-row input:focus { border-color: #e94560; }
+  .input-row input::placeholder { color: #484f58; }
+
+  .btn {
+    background: #e94560;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:active { opacity: 0.8; }
+  .btn.cancel { background: #30363d; }
+  .btn:disabled { opacity: 0.4; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .panel-header .title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e94560;
+  }
+  .panel-header .close-btn {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .panel-header .close-btn:active { color: #e94560; }
+</style>
+</head>
+<body>
+
+<div class="container" id="container">
+  <div class="pet-area" id="petArea">
+    <div class="speech-bubble" id="speechBubble">
+      <span class="speech-text" id="speechText"></span>
+    </div>
+    <canvas id="petCanvas" width="120" height="120"></canvas>
+    <div class="status-dot" id="statusDot"></div>
+  </div>
+  <div class="status-label" id="statusLabel">idle</div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <span class="title">Claude Code</span>
+      <button class="close-btn" id="collapseBtn">&times;</button>
+    </div>
+    <div class="output-area" id="output"></div>
+    <div class="input-row">
+      <input type="text" id="promptInput" placeholder="Ask Claude..." autocomplete="off" />
+      <button class="btn" id="sendBtn">Send</button>
+      <button class="btn cancel" id="cancelBtn" style="display:none">Stop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// Claude Code Pet — Mobile Client
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── URL params ──
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get("token") || "";
+const CHAR_ID = params.get("char") || "pixel-claude";
+const ORIGIN = location.origin;
+
+// ── DOM refs ──
+const container = document.getElementById("container");
+const petCanvas = document.getElementById("petCanvas");
+const statusDot = document.getElementById("statusDot");
+const statusLabel = document.getElementById("statusLabel");
+const speechBubble = document.getElementById("speechBubble");
+const speechText = document.getElementById("speechText");
+const output = document.getElementById("output");
+const promptInput = document.getElementById("promptInput");
+const sendBtn = document.getElementById("sendBtn");
+const cancelBtn = document.getElementById("cancelBtn");
+const collapseBtn = document.getElementById("collapseBtn");
+const petArea = document.getElementById("petArea");
+
+let isExpanded = false;
+let currentStatus = "idle";
+let isRunning = false;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SpriteRenderer (adapted from pet.html — uses HTTP URLs instead of file://)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class SpriteRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.config = null;
+    this.basePath = "";
+    this.images = {};
+    this.currentState = "idle";
+    this.currentFrame = 0;
+    this.frameTimer = null;
+  }
+
+  async loadCharacter(charId) {
+    this.destroy();
+    this.basePath = ORIGIN + "/characters/" + charId + "/";
+
+    const configPath = this.basePath + "character.json";
+    const raw = await fetch(configPath).then(r => r.text());
+    this.config = JSON.parse(raw);
+
+    if (!this.config.frameWidth) this.config.frameWidth = 120;
+    if (!this.config.frameHeight) this.config.frameHeight = 120;
+    if (!this.config.defaultFrameDuration) this.config.defaultFrameDuration = 150;
+    if (!this.config.fallbackMap) this.config.fallbackMap = {};
+    if (!this.config.states) this.config.states = {};
+
+    const loadPromises = [];
+    for (const [stateKey, stateConf] of Object.entries(this.config.states)) {
+      loadPromises.push(this._loadImage(stateKey, stateConf.file));
+    }
+    await Promise.allSettled(loadPromises);
+    this.setState("idle");
+  }
+
+  _loadImage(stateKey, filename) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => { this.images[stateKey] = img; resolve(); };
+      img.onerror = () => { resolve(); };
+      img.src = this.basePath + filename;
+    });
+  }
+
+  resolveState(key) {
+    if (this.config.states[key] && this.images[key]) return key;
+    const visited = new Set();
+    let current = key;
+    while (this.config.fallbackMap[current] && !visited.has(current)) {
+      visited.add(current);
+      current = this.config.fallbackMap[current];
+      if (this.config.states[current] && this.images[current]) return current;
+    }
+    return this.images["idle"] ? "idle" : null;
+  }
+
+  setState(stateKey) {
+    const resolved = this.resolveState(stateKey);
+    if (!resolved) return;
+    this.currentState = resolved;
+    this.currentFrame = 0;
+    if (this.frameTimer) { clearInterval(this.frameTimer); this.frameTimer = null; }
+
+    const stateConf = this.config.states[resolved];
+    const frameCount = stateConf.frameCount || 1;
+    const duration = stateConf.frameDuration || this.config.defaultFrameDuration;
+    const loop = stateConf.loop !== false;
+
+    this._drawFrame();
+
+    if (frameCount > 1) {
+      this.frameTimer = setInterval(() => {
+        this.currentFrame++;
+        if (this.currentFrame >= frameCount) {
+          if (loop) {
+            this.currentFrame = 0;
+          } else {
+            this.currentFrame = frameCount - 1;
+            clearInterval(this.frameTimer);
+            this.frameTimer = null;
+            return;
+          }
+        }
+        this._drawFrame();
+      }, duration);
+    }
+  }
+
+  _drawFrame() {
+    const img = this.images[this.currentState];
+    if (!img) return;
+    const fw = this.config.frameWidth;
+    const fh = this.config.frameHeight;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.drawImage(img, this.currentFrame * fw, 0, fw, fh, 0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  destroy() {
+    if (this.frameTimer) { clearInterval(this.frameTimer); this.frameTimer = null; }
+    if (this.ctx) this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.images = {};
+    this.config = null;
+    this.currentFrame = 0;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Speech System (copied from pet.html)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function shorten(s, max) {
+  if (!s) return "";
+  return s.length > max ? s.substring(0, max - 1) + "\u2026" : s;
+}
+function speechBasename(filepath) {
+  if (!filepath) return null;
+  return filepath.replace(/\\/g, "/").split("/").pop();
+}
+function speechExtname(filepath) {
+  const name = speechBasename(filepath);
+  if (!name || !name.includes(".")) return null;
+  return name.split(".").pop().toLowerCase();
+}
+function getHour() { return new Date().getHours(); }
+function isLateNight() { const h = getHour(); return h >= 23 || h < 5; }
+function isEarlyMorning() { const h = getHour(); return h >= 5 && h < 8; }
+function isEvening() { const h = getHour(); return h >= 18 && h < 23; }
+
+const SPEECH = {
+  coding: {
+    generic: [
+      "Time to code!", "Let's build something cool", "Fingers on keyboard...",
+      "In the zone", "Making magic happen", "Code go brrr",
+      "Writing some logic...", "Tappity tap tap", "Creating stuff!",
+      "Crafting code...", "Building away...", "Hack hack hack",
+      "Flow state: activated", "Let's do this!", "Making things happen",
+      "Working on it...", "Coding away~", "Another file, another function",
+      "The code writes itself... kinda", "Here we go!", "Getting creative",
+      "Adding some spice to the codebase", "Trust the process",
+      "One line at a time", "In my coding era",
+    ],
+    withFile: function(f) {
+      const name = speechBasename(f);
+      const ext = speechExtname(f);
+      const msgs = [
+        `Editing ${name}...`, `Working on ${name}`, `Touching up ${name}`,
+        `${name} needs some love`, `Let's fix up ${name}`, `Tweaking ${name}...`,
+      ];
+      if (ext === "css" || ext === "scss") msgs.push("CSS time... pray for me", "Centering a div again?");
+      if (ext === "test" || ext === "spec" || (name && name.includes("test"))) msgs.push("Writing tests? Responsible!");
+      if (name === "package.json") msgs.push("The sacred package.json");
+      if (ext === "ts" || ext === "tsx") msgs.push("TypeScript FTW!");
+      if (ext === "py") msgs.push("Python time!", "Indentation matters...");
+      if (ext === "rs") msgs.push("Rust! The borrow checker awaits");
+      return msgs;
+    },
+    withCommand: function(cmd) {
+      if (cmd.includes("git commit")) return ["Committing! Ship it!"];
+      if (cmd.includes("git add")) return ["Staging changes..."];
+      if (cmd.includes("git merge")) return ["Merge time... fingers crossed"];
+      if (cmd.includes("git rebase")) return ["Rebasing... hold tight"];
+      return null;
+    },
+    rare: [
+      "I am one with the code", "This is my magnum opus",
+      "Today's bug is tomorrow's feature", "10x developer energy",
+      "Coffee + code = bliss", "We're in the matrix now",
+    ],
+  },
+  thinking: {
+    generic: [
+      "Hmm, let me think...", "Processing...", "Big brain time",
+      "Pondering the universe", "Hold on, thinking...", "Calculating...",
+      "Running the numbers...", "Let me figure this out", "Deep in thought...",
+      "Considering the possibilities", "Hmmmmm...", "Give me a sec...",
+      "Analyzing the situation", "Brain.exe is running", "Neurons firing...",
+      "Working on a plan...", "Almost got it...", "Connecting the dots...",
+      "Thinking thinking thinking", "Let me cook...", "Loading genius idea...",
+    ],
+    rare: [
+      "What if we just... no wait", "I think I see the answer!",
+      "This is a tricky one...", "Consulting the ancient scrolls",
+      "404: Solution not found... yet",
+    ],
+  },
+  success: {
+    generic: [
+      "Done!", "Nailed it!", "All good!", "Mission accomplished",
+      "Easy peasy", "And that's a wrap!", "Boom. Done.",
+      "Another one bites the dust", "Task complete!", "Victory!",
+      "Crushed it!", "That went well!", "Clean execution",
+      "Smooth sailing", "Like a boss", "GG!", "*chef's kiss*",
+      "Flawless", "And the crowd goes wild!",
+    ],
+    rare: [
+      "I'm basically a genius", "Was there ever any doubt?",
+      "Too easy!", "My greatest work yet", "Mic drop",
+    ],
+  },
+  error: {
+    generic: [
+      "Uh oh...", "That didn't go well", "Error! Don't panic",
+      "Oops. Let me try again", "Well that's not ideal",
+      "Houston, we have a problem", "Hmm, that broke",
+      "This is fine. Everything is fine.", "Bruh.",
+      "We'll get 'em next time", "Task failed successfully?",
+      "It's not a bug, it's a feature", "Time for plan B",
+      "Let's pretend that didn't happen", "Whoopsie daisy",
+      "Back to the drawing board", "Welp.",
+    ],
+    withError: function(err) {
+      const short = shorten(err, 35);
+      return [`Hmm: ${short}`, `Oops \u2014 ${short}`, `That failed: ${short}`];
+    },
+    rare: [
+      "My code is perfect, the computer is wrong",
+      "Have you tried turning it off and on?",
+      "Works on my machine \xAF\\_(ツ)_/\xAF",
+    ],
+  },
+  searching: {
+    generic: [
+      "Looking for something...", "Where is it...", "Searching...",
+      "Hunting for clues", "Let me find that...", "Scanning the codebase",
+      "Like finding a needle in a haystack", "It's here somewhere...",
+      "Detective mode", "Searching high and low", "Rummaging through files...",
+    ],
+    withQuery: function(q) {
+      const short = shorten(q, 22);
+      return [`Searching for "${short}"`, `Looking for ${short}...`, `Where's ${short}?`];
+    },
+    withFile: function(f) {
+      return [`Searching in ${speechBasename(f)}...`, `Scanning ${speechBasename(f)}...`];
+    },
+    rare: [
+      "The truth is out there", "We're gonna need a bigger grep",
+      "Found it! Oh wait, no...",
+    ],
+  },
+  reading: {
+    generic: [
+      "Reading time", "Let me take a look...", "Studying the code...",
+      "Understanding the lay of the land", "Reading through this...",
+      "Taking notes...", "Hmm interesting...", "Learning the codebase",
+      "Page by page...", "Absorbing knowledge", "Context loading...",
+    ],
+    withFile: function(f) {
+      const name = speechBasename(f);
+      return [`Reading ${name}...`, `Checking out ${name}`, `What's in ${name}?`, `Studying ${name}`];
+    },
+    rare: [
+      "This code has seen some things", "Who wrote this?! Oh wait...",
+      "Reading between the lines",
+    ],
+  },
+  testing: {
+    generic: [
+      "Running tests...", "Please pass, please pass...", "Test time!",
+      "Moment of truth", "Green or red?", "Testing 1, 2, 3...",
+      "Will it blend?", "Fingers crossed!", "The tests will decide your fate",
+      "All green? ALL GREEN??", "Running the gauntlet",
+    ],
+    rare: [
+      "100% code coverage? In this economy?", "Tests don't lie. Usually.",
+      "If the tests pass, ship it!",
+    ],
+  },
+  installing: {
+    generic: [
+      "Installing packages...", "npm install... brb", "Adding dependencies",
+      "Downloading the internet", "node_modules grows heavier...",
+      "Package time!", "Installing stuff...", "Just a few more megabytes...",
+    ],
+    rare: [
+      "I need ALL the packages", "node_modules: the black hole of disk space",
+    ],
+  },
+  debugging: {
+    generic: [
+      "Bug hunt!", "Where's the bug...", "Detective mode activated",
+      "It's always a missing semicolon", "console.log to the rescue",
+      "Squashing bugs", "Following the trail...", "The plot thickens",
+      "Why doesn't this work??", "Let me inspect this...", "Debugging time!",
+    ],
+    rare: [
+      "It was a typo. It's ALWAYS a typo.", "The bug was inside me all along",
+      "Rubber duck, lend me your ears",
+    ],
+  },
+  deploying: {
+    generic: [
+      "Deploying!", "Ship it!", "To production we go!", "YOLO deploy",
+      "Pushing to the world", "Release time!", "Launching...",
+      "Prepare for liftoff!", "3... 2... 1... deployed!",
+    ],
+    rare: [
+      "Deploy on Friday? I too like to live dangerously",
+      "May the uptime gods smile upon us",
+    ],
+  },
+  downloading: {
+    generic: [
+      "Downloading...", "Fetching stuff...", "Grabbing files",
+      "Pulling from the cloud", "Loading...", "Getting data...",
+    ],
+    rare: ["Downloading more RAM...", "The internet is a series of tubes"],
+  },
+  cooking: {
+    generic: [
+      "Building...", "Compiling!", "Cook cook cook", "Baking the code...",
+      "Bundling up...", "Making something great", "Build in progress...",
+      "Assembling the pieces", "Crunching...", "Transpiling away",
+    ],
+    rare: ["Compilation: the original coffee break", "It's compiling \u2014 I'm legally allowed to goof off"],
+  },
+  deleting: {
+    generic: [
+      "Cleaning up!", "Out with the old", "Bye bye files", "Spring cleaning",
+      "Decluttering...", "Marie Kondo mode", "Removing the cruft",
+      "Trimming the fat", "Deleting stuff...", "Less is more!",
+    ],
+    rare: ["The best code is no code", "Deleting code is therapeutic"],
+  },
+  idle: {
+    generic: [
+      "Chillin'...", "Just vibing", "Waiting for action",
+      "Twiddling my pixels", "*yawn*", "Zzz...", "Anyone there?",
+      "I could use a task...", "Standing by!", "Ready when you are",
+      "Taking a breather", "Enjoying the silence", "Contemplating existence",
+      "Loading motivation...", "AFK?", "Is it snack time?",
+      "Stretching my bits...", "Pixel nap time", "Wonder what's on HackerNews",
+      "Practicing my idle animation", "Daydreaming in binary",
+      "404: Tasks not found",
+    ],
+    rare: [
+      "To ship or not to ship...", "I'm not sleeping, I'm optimizing!",
+      "Do pixels dream of electric sheep?", "I think, therefore I compile",
+    ],
+  },
+};
+
+const TIME_MESSAGES = {
+  lateNight: [
+    "Late night coding session!", "Burning the midnight oil...",
+    "Sleep is overrated... right?", "Night owl energy",
+  ],
+  earlyMorning: [
+    "Early bird gets the merge!", "Morning productivity!",
+    "Rise and code!", "Coffee first, bugs later",
+  ],
+  evening: [
+    "Evening coding session", "One more feature before bed...",
+    "Golden hour for coding", "Night mode: activated",
+  ],
+};
+
+const STREAK_MESSAGES = {
+  coding: {
+    3: ["On a roll!", "Typing machine!", "Can't stop won't stop"],
+    5: ["5th file! You're on fire!", "Coding marathon!"],
+  },
+  thinking: {
+    3: ["Still thinking... it's a big one", "Extra processing needed"],
+    5: ["That's a LOT of thinking", "The answer will come..."],
+  },
+  error: {
+    2: ["Again?!", "Another one??"],
+    3: ["Third time's a charm... right?"],
+    5: ["It WILL work eventually"],
+  },
+};
+
+const SPEECH_DURATION = 3500;
+const SPEECH_COOLDOWN = 5000;
+const SPEECH_CHANCE = 0.70;
+const RARE_CHANCE = 0.15;
+const TIME_CHANCE = 0.12;
+const STREAK_CHANCE = 0.50;
+const IDLE_SPEECH_INTERVAL = 25000;
+const IDLE_SPEECH_CHANCE = 0.30;
+
+let speechTimer = null;
+let speechCooldown = false;
+let lastSpeechMessage = null;
+let stateStreak = { state: null, count: 0 };
+let idleSpeechTimer = null;
+
+function generateSpeechMessage(status, context) {
+  context = context || {};
+  const pool = SPEECH[status];
+  if (!pool) return null;
+
+  if (status === stateStreak.state) {
+    stateStreak.count++;
+  } else {
+    stateStreak = { state: status, count: 1 };
+  }
+
+  const streaks = STREAK_MESSAGES[status];
+  if (streaks && Math.random() < STREAK_CHANCE) {
+    const thresholds = Object.keys(streaks).map(Number).sort((a, b) => b - a);
+    for (const t of thresholds) {
+      if (stateStreak.count >= t) return pick(streaks[t]);
+    }
+  }
+
+  if (Math.random() < TIME_CHANCE) {
+    if (isLateNight()) return pick(TIME_MESSAGES.lateNight);
+    if (isEarlyMorning()) return pick(TIME_MESSAGES.earlyMorning);
+    if (isEvening()) return pick(TIME_MESSAGES.evening);
+  }
+
+  if (pool.rare && Math.random() < RARE_CHANCE) return pick(pool.rare);
+
+  if (context.error && pool.withError) {
+    const msgs = pool.withError(context.error);
+    if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+  }
+  if (context.command && pool.withCommand) {
+    const msgs = pool.withCommand(context.command);
+    if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+  }
+  if (context.file && pool.withFile) {
+    const msgs = pool.withFile(context.file);
+    if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+  }
+  if (context.query && pool.withQuery) {
+    const msgs = pool.withQuery(context.query);
+    if (msgs) return typeof msgs === "string" ? msgs : pick(msgs);
+  }
+
+  return pick(pool.generic);
+}
+
+function showSpeechBubble(message) {
+  if (!message) return;
+  if (speechCooldown) return;
+  if (Math.random() > SPEECH_CHANCE) return;
+  if (message === lastSpeechMessage) return;
+
+  lastSpeechMessage = message;
+  if (speechTimer) clearTimeout(speechTimer);
+
+  speechText.textContent = message;
+  speechBubble.classList.remove("fading");
+  speechBubble.classList.add("visible");
+
+  speechTimer = setTimeout(() => {
+    speechBubble.classList.add("fading");
+    setTimeout(() => speechBubble.classList.remove("visible", "fading"), 500);
+  }, SPEECH_DURATION);
+
+  speechCooldown = true;
+  setTimeout(() => { speechCooldown = false; }, SPEECH_COOLDOWN);
+}
+
+function showSpeechForced(message) {
+  if (!message) return;
+  lastSpeechMessage = message;
+  if (speechTimer) clearTimeout(speechTimer);
+  speechText.textContent = message;
+  speechBubble.classList.remove("fading");
+  speechBubble.classList.add("visible");
+  speechTimer = setTimeout(() => {
+    speechBubble.classList.add("fading");
+    setTimeout(() => speechBubble.classList.remove("visible", "fading"), 500);
+  }, SPEECH_DURATION + 1000);
+}
+
+function startIdleSpeech() {
+  stopIdleSpeech();
+  idleSpeechTimer = setInterval(() => {
+    if (currentStatus === "idle" && Math.random() < IDLE_SPEECH_CHANCE) {
+      const msg = generateSpeechMessage("idle", {});
+      if (msg && msg !== lastSpeechMessage) {
+        lastSpeechMessage = msg;
+        if (speechTimer) clearTimeout(speechTimer);
+        speechText.textContent = msg;
+        speechBubble.classList.remove("fading");
+        speechBubble.classList.add("visible");
+        speechTimer = setTimeout(() => {
+          speechBubble.classList.add("fading");
+          setTimeout(() => speechBubble.classList.remove("visible", "fading"), 500);
+        }, SPEECH_DURATION);
+      }
+    }
+  }, IDLE_SPEECH_INTERVAL);
+}
+
+function stopIdleSpeech() {
+  if (idleSpeechTimer) { clearInterval(idleSpeechTimer); idleSpeechTimer = null; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Relay Client (WebSocket)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class RelayClient {
+  constructor() {
+    this.ws = null;
+    this.connected = false;
+    this.reconnectDelay = 1000;
+    this.maxReconnectDelay = 30000;
+    this.pingInterval = null;
+  }
+
+  connect() {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${location.host}`;
+
+    this.ws = new WebSocket(wsUrl);
+    statusDot.className = "status-dot connecting";
+
+    this.ws.onopen = () => {
+      this.ws.send(JSON.stringify({ type: "auth", token: TOKEN }));
+    };
+
+    this.ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      this._handleMessage(msg);
+    };
+
+    this.ws.onclose = () => {
+      this.connected = false;
+      statusDot.className = "status-dot";
+      this._stopPing();
+      setTimeout(() => {
+        this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
+        this.connect();
+      }, this.reconnectDelay);
+    };
+
+    this.ws.onerror = () => {
+      // onclose will fire after this
+    };
+  }
+
+  _handleMessage(msg) {
+    switch (msg.type) {
+      case "auth_ok":
+        this.connected = true;
+        this.reconnectDelay = 1000;
+        statusDot.className = "status-dot connected";
+        this._startPing();
+        appendOutput("Connected to relay", "system-msg");
+        break;
+
+      case "auth_fail":
+        appendOutput("Authentication failed — check token", "error-msg");
+        break;
+
+      case "pet_status":
+        handlePetStatus(msg.status, msg.context || {});
+        break;
+
+      case "task_start":
+        isRunning = true;
+        updateButtons();
+        appendOutput(`\u25B6 Running: ${msg.prompt}`, "system-msg");
+        break;
+
+      case "stream":
+        appendStream(msg.text);
+        break;
+
+      case "output":
+        appendOutput(msg.text, "stream-text");
+        break;
+
+      case "tool_event":
+        if (msg.tool) {
+          appendOutput(`\u{1F527} ${msg.tool} (${msg.status})`, "tool-msg");
+        }
+        break;
+
+      case "task_done":
+        isRunning = false;
+        updateButtons();
+        const dur = msg.duration ? ` (${Math.round(msg.duration / 1000)}s)` : "";
+        appendOutput(`\u2705 Done${dur}`, "system-msg");
+        break;
+
+      case "task_cancelled":
+        isRunning = false;
+        updateButtons();
+        appendOutput("\u274C Cancelled", "system-msg");
+        break;
+
+      case "queued":
+        appendOutput(`Queued (#${msg.position}): ${msg.prompt}`, "system-msg");
+        break;
+
+      case "error":
+        appendOutput(`Error: ${msg.message}`, "error-msg");
+        break;
+
+      case "log":
+        appendOutput(msg.text, "system-msg");
+        break;
+
+      case "pong":
+        break;
+    }
+  }
+
+  send(msg) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  _startPing() {
+    this._stopPing();
+    this.pingInterval = setInterval(() => {
+      this.send({ type: "ping" });
+    }, 25000);
+  }
+
+  _stopPing() {
+    if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+  }
+}
+
+// ── Streaming text accumulator ──
+let streamEl = null;
+
+function appendStream(text) {
+  if (!streamEl) {
+    streamEl = document.createElement("div");
+    streamEl.className = "stream-text";
+    output.appendChild(streamEl);
+  }
+  streamEl.textContent += text;
+  output.scrollTop = output.scrollHeight;
+}
+
+function appendOutput(text, cls) {
+  streamEl = null; // reset stream accumulator
+  const div = document.createElement("div");
+  div.className = cls || "";
+  div.textContent = text;
+  output.appendChild(div);
+  // Keep output manageable
+  while (output.children.length > 200) output.removeChild(output.firstChild);
+  output.scrollTop = output.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Pet status handling
+// ══════════════════════════════════════════════════════════════════════════════
+
+function handlePetStatus(status, context) {
+  if (!status) return;
+  const prevStatus = currentStatus;
+  currentStatus = status;
+  statusLabel.textContent = status;
+
+  if (sprite && sprite.config) {
+    sprite.setState(status);
+  }
+
+  if (status !== prevStatus) {
+    const msg = generateSpeechMessage(status, context);
+    showSpeechBubble(msg);
+
+    if (status === "idle") startIdleSpeech();
+    else stopIdleSpeech();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Expand / Collapse
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setExpanded(expanded) {
+  isExpanded = expanded;
+  if (expanded) {
+    container.classList.add("expanded");
+  } else {
+    container.classList.remove("expanded");
+    promptInput.blur();
+  }
+  // Notify Android overlay to resize
+  if (window.AndroidBridge) {
+    try { window.AndroidBridge.setExpanded(expanded); } catch {}
+  }
+}
+
+petArea.addEventListener("click", () => {
+  if (!isExpanded) setExpanded(true);
+});
+
+collapseBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setExpanded(false);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Prompt sending
+// ══════════════════════════════════════════════════════════════════════════════
+
+function updateButtons() {
+  if (isRunning) {
+    sendBtn.style.display = "none";
+    cancelBtn.style.display = "";
+  } else {
+    sendBtn.style.display = "";
+    cancelBtn.style.display = "none";
+  }
+}
+
+function sendPrompt() {
+  const text = promptInput.value.trim();
+  if (!text) return;
+  relay.send({ type: "prompt", prompt: text });
+  promptInput.value = "";
+}
+
+sendBtn.addEventListener("click", sendPrompt);
+promptInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); sendPrompt(); }
+});
+cancelBtn.addEventListener("click", () => {
+  relay.send({ type: "cancel" });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════════════════════════════════════
+
+const sprite = new SpriteRenderer(petCanvas);
+const relay = new RelayClient();
+
+async function init() {
+  try {
+    await sprite.loadCharacter(CHAR_ID);
+    appendOutput(`Loaded character: ${CHAR_ID}`, "system-msg");
+  } catch (e) {
+    appendOutput(`Failed to load character: ${e.message}`, "error-msg");
+  }
+
+  if (TOKEN) {
+    relay.connect();
+  } else {
+    appendOutput("No token provided — add ?token=xxx to URL", "error-msg");
+    statusDot.className = "status-dot";
+  }
+
+  startIdleSpeech();
+}
+
+init();
+</script>
+</body>
+</html>

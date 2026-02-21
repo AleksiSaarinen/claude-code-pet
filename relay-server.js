@@ -40,16 +40,95 @@ function generateToken() {
   return token;
 }
 
-// ── HTTP Server (health check + token display) ─────────────────────────────
+// ── MIME types ──────────────────────────────────────────────────────────────
+
+const MIME = {
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "application/javascript",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".webm": "video/webm",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+};
+
+// ── HTTP Server (static files + health check) ──────────────────────────────
+
+const CHARACTERS_DIR = path.join(__dirname, "characters");
+const MOBILE_DIR = path.join(__dirname, "mobile");
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = decodeURIComponent(url.pathname);
+
+  if (pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok", project: PROJECT_DIR }));
-  } else {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Claude Code Pet Relay Server\nConnect via WebSocket on this port.");
+    return;
   }
+
+  // GET /mobile → serve mobile/index.html
+  if (pathname === "/mobile") {
+    const filePath = path.join(MOBILE_DIR, "index.html");
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end("Not found"); return; }
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(data);
+    });
+    return;
+  }
+
+  // GET /characters → JSON array of available character IDs
+  if (pathname === "/characters") {
+    try {
+      const entries = fs.readdirSync(CHARACTERS_DIR, { withFileTypes: true });
+      const chars = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const configPath = path.join(CHARACTERS_DIR, entry.name, "character.json");
+        if (fs.existsSync(configPath)) {
+          try {
+            const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+            chars.push({ id: config.id || entry.name, name: config.name || entry.name });
+          } catch { /* skip invalid */ }
+        }
+      }
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(chars));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // GET /characters/<name>/<file> → serve character assets
+  if (pathname.startsWith("/characters/")) {
+    const relative = pathname.slice("/characters/".length);
+    // Path traversal protection
+    if (relative.includes("..") || relative.includes("~")) {
+      res.writeHead(403); res.end("Forbidden"); return;
+    }
+    const filePath = path.join(CHARACTERS_DIR, relative);
+    // Ensure resolved path is still inside CHARACTERS_DIR
+    if (!path.resolve(filePath).startsWith(path.resolve(CHARACTERS_DIR))) {
+      res.writeHead(403); res.end("Forbidden"); return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = MIME[ext] || "application/octet-stream";
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end("Not found"); return; }
+      res.writeHead(200, { "Content-Type": contentType, "Access-Control-Allow-Origin": "*" });
+      res.end(data);
+    });
+    return;
+  }
+
+  // Default response
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Claude Code Pet Relay Server\nConnect via WebSocket on this port.");
 });
 
 // ── WebSocket Server ───────────────────────────────────────────────────────
@@ -150,7 +229,7 @@ function runClaudeTask(prompt) {
   ], {
     cwd: PROJECT_DIR,
     shell: true,
-    env: { ...process.env },
+    env: (() => { const e = { ...process.env }; delete e.CLAUDECODE; return e; })(),
   });
 
   activeTask.process = claude;
@@ -319,6 +398,8 @@ server.listen(PORT, () => {
   console.log(`   Port:    ${PORT}`);
   console.log(`   Project: ${PROJECT_DIR}`);
   console.log(`   Token:   ${AUTH_TOKEN.substring(0, 8)}...`);
+  console.log(`\n   Mobile pet page:`);
+  console.log(`   http://localhost:${PORT}/mobile?token=${AUTH_TOKEN}`);
   console.log(`\n   Connect from phone with:`);
   console.log(`   ws://<your-ip>:${PORT}`);
   console.log(`   First message: { "type": "auth", "token": "${AUTH_TOKEN}" }`);

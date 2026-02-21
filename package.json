@@ -14,7 +14,9 @@
     "set-thinking": "node set-status.js thinking",
     "set-coding": "node set-status.js coding",
     "set-success": "node set-status.js success",
-    "set-error": "node set-status.js error"
+    "set-error": "node set-status.js error",
+    "relay": "node relay-server.js",
+    "relay:dev": "RELAY_TOKEN=dev-token node relay-server.js"
   },
   "build": {
     "appId": "com.claude-code-pet.app",
@@ -33,12 +35,16 @@
       "deleteAppDataOnUninstall": true
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "icon.png",
       "category": "public.app-category.utilities"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "icon": "icon.png",
       "category": "Utility"
     },
@@ -57,6 +63,10 @@
       {
         "from": "characters/",
         "to": "characters/"
+      },
+      {
+        "from": "relay-server.js",
+        "to": "relay-server.js"
       }
     ]
   },
@@ -67,6 +77,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "three": "^0.183.0"
+    "three": "^0.183.0",
+    "ws": "^8.19.0"
   }
 }

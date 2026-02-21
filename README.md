@@ -69,6 +69,16 @@ npm run set-success
 npm run set-error
 ```
 
+## Mobile Relay
+
+Control Claude Code from your phone. The relay server (`relay-server.js`) is a WebSocket bridge that accepts prompts from a mobile client, runs them through `claude -p`, and streams results back — while keeping the pet's status in sync so a mobile pet reacts in real-time.
+
+```bash
+npm run relay          # start the relay server (port 3777)
+```
+
+Set `RELAY_TOKEN` for a fixed auth token, and `RELAY_PROJECT_DIR` to point at your project. For remote access, use a Cloudflare Tunnel. See [MOBILE-RELAY.md](MOBILE-RELAY.md) for full setup and protocol docs.
+
 ## How it works
 
 1. Claude Code fires hook events as you work (tool use, prompts, errors, completions)

@@ -107,5 +107,26 @@ The app runs on Windows, macOS, and Linux. Key platform notes:
 - Body has `overflow: hidden` — bubble must stay inside the scene bounds
 - Use `top: 4px; transform: translateX(-50%)` — NOT `translateY(-100%)` which pushes it above the clipped area
 
+## Mobile Relay Server
+`relay-server.js` — WebSocket server that bridges your phone to Claude Code on your PC. Accepts prompts via WebSocket with token auth, spawns `claude -p` with stream-json output, streams results back, and broadcasts pet status changes so a mobile pet stays in sync.
+
+### Running:
+```bash
+npm run relay                    # auto-generates a random auth token
+npm run relay:dev                # uses RELAY_TOKEN=dev-token
+RELAY_TOKEN="secret" RELAY_PROJECT_DIR="/path/to/project" node relay-server.js
+```
+
+### Env vars:
+- `RELAY_PORT` — WebSocket port (default: 3777)
+- `RELAY_TOKEN` — auth token (auto-generated if not set)
+- `RELAY_PROJECT_DIR` — working directory for `claude -p` (default: cwd)
+
+### Architecture:
+- Phone connects via WebSocket, sends `{ type: "auth", token }` first
+- Prompts queued if one is already running; supports cancel
+- Watches the same pet status file the desktop app uses → broadcasts `pet_status` to phone
+- See `MOBILE-RELAY.md` for full protocol docs, security notes, and Cloudflare Tunnel setup
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

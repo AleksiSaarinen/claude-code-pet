@@ -2343,9 +2343,8 @@
     transition: opacity 0.3s ease, transform 0.3s ease;
     pointer-events: none;
     z-index: 100;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    word-wrap: break-word;
     line-height: 1.4;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     transform-origin: bottom center;
@@ -3706,6 +3705,20 @@
           "Loading motivation...",
           "AFK?",
           "Is it snack time?",
+          "Stretching my bits...",
+          "Pixel nap time",
+          "I should learn a new framework",
+          "Wonder what's on HackerNews",
+          "Practicing my idle animation",
+          "Daydreaming in binary",
+          "Counting semicolons...",
+          "Tab or spaces? Deep thoughts.",
+          "Rebasing my thoughts...",
+          "Just here for the vibes",
+          "Staring into the void(0)",
+          "My code sense is tingling",
+          "Buffering...",
+          "404: Tasks not found",
         ],
         rare: [
           "I wonder what the meaning of code is",
@@ -3714,6 +3727,10 @@
           "My idle animation is my cardio",
           "Waiting for inspiration to strike",
           "Do pixels dream of electric sheep?",
+          "I think, therefore I compile",
+          "In my debugging era",
+          "Somewhere, a merge conflict weeps",
+          "Rumor has it I was a segfault in a past life",
         ],
       },
     };
@@ -3741,6 +3758,10 @@
         "Winding down... or starting up?",
         "One more feature before bed...",
         "PM productivity boost",
+        "Golden hour for coding",
+        "The evening shift begins",
+        "Night mode: activated",
+        "Sunset commits hit different",
       ],
     };
 
@@ -5414,6 +5435,57 @@
       showSpeechBubble(msg);
       if (status === "idle") startIdleSpeech();
       else stopIdleSpeech();
+    });
+
+    // ── DEMO MODE: force a specific variant (bypass random rolling) ──
+    const demoRecentMessages = [];
+    const DEMO_DEDUP_SIZE = 8; // remember last 8 messages to avoid repeats
+
+    ipcRenderer.on("force-variant", (e, data) => {
+      const { variant, baseState } = data;
+      const config = ANIMATIONS[variant] || ANIMATIONS["idle"];
+
+      // Stop idle cycling — demo controls everything
+      stopIdleCycle();
+      stopIdleSpeech();
+
+      // Reset tracking so normal setState works after demo ends
+      currentBaseState = null;
+      currentActivityVariant = null;
+
+      // Apply the variant visually (same as setState/applyIdleMood internals)
+      const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
+      const charClass = cssCharMode ? " " + cssCharMode : "";
+      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass + charClass;
+      label.textContent = config.label || variant;
+      currentState = variant;
+
+      if ((spriteMode || videoMode || modelMode) && spriteRenderer) {
+        spriteRenderer.setState(variant);
+      }
+
+      const customMode = spriteMode || videoMode || modelMode;
+      const showAccessories = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.accessoriesEnabled);
+      const showParticles = !customMode || (spriteRenderer && spriteRenderer.config && spriteRenderer.config.particlesEnabled);
+
+      if (showAccessories) updateAccessories(config);
+      else accessoryLayer.innerHTML = "";
+
+      if (showParticles) updateParticles(config);
+      else { if (particleInterval) { clearInterval(particleInterval); particleInterval = null; } particleLayer.innerHTML = ""; }
+
+      updateSkillLabel();
+
+      // Show speech bubble — retry up to 5 times to avoid recent duplicates
+      let msg = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        msg = generateSpeechMessage(baseState, {});
+        if (msg && !demoRecentMessages.includes(msg)) break;
+      }
+      msg = msg || config.label || variant;
+      demoRecentMessages.push(msg);
+      if (demoRecentMessages.length > DEMO_DEDUP_SIZE) demoRecentMessages.shift();
+      showSpeechForced(msg);
     });
 
     ipcRenderer.on("status-update", (e, data) => {

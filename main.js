@@ -99,6 +99,91 @@ let currentIdleVariant = "idle";
 let currentActivityVariant = null;
 let currentContext = {};
 
+// ── Demo Mode ───────────────────────────────────────────────────────────────
+
+let demoActive = false;
+let demoInterval = null;
+let demoIndex = 0;
+
+const DEMO_SEQUENCE = [
+  // Idle variants
+  { variant: "idle",            base: "idle" },
+  { variant: "idle-vibing",     base: "idle" },
+  { variant: "idle-sleepy",     base: "idle" },
+  { variant: "idle-coffee",     base: "idle" },
+  { variant: "idle-stargazing", base: "idle" },
+  // Coding
+  { variant: "coding",         base: "coding" },
+  { variant: "coding-flow",    base: "coding" },
+  { variant: "coding-hacking", base: "coding" },
+  // Thinking
+  { variant: "thinking",          base: "thinking" },
+  { variant: "thinking-eureka",   base: "thinking" },
+  { variant: "thinking-galaxy",   base: "thinking" },
+  { variant: "thinking-exploring", base: "thinking" },
+  // Searching
+  { variant: "searching",          base: "searching" },
+  { variant: "searching-treasure", base: "searching" },
+  { variant: "searching-deep",     base: "searching" },
+  // Reading
+  { variant: "reading",         base: "reading" },
+  { variant: "reading-scholar",  base: "reading" },
+  { variant: "reading-ancient",  base: "reading" },
+  // Debugging
+  { variant: "debugging",           base: "debugging" },
+  { variant: "debugging-detective",  base: "debugging" },
+  { variant: "debugging-rage",      base: "debugging" },
+  // Testing
+  { variant: "testing",              base: "testing" },
+  { variant: "testing-scientist",    base: "testing" },
+  { variant: "testing-perfectionist", base: "testing" },
+  // Deploying
+  { variant: "deploying",           base: "deploying" },
+  { variant: "deploying-satellite",  base: "deploying" },
+  { variant: "deploying-warp",      base: "deploying" },
+  // Single states
+  { variant: "installing",  base: "installing" },
+  { variant: "cooking",     base: "cooking" },
+  { variant: "hatching",    base: "hatching" },
+  { variant: "deleting",    base: "deleting" },
+  { variant: "downloading", base: "downloading" },
+  // Transient
+  { variant: "success", base: "success" },
+  { variant: "error",   base: "error" },
+  // Rare idle variants
+  { variant: "idle-stretching",  base: "idle" },
+  { variant: "idle-dancing",     base: "idle" },
+  { variant: "idle-butterfly",   base: "idle" },
+  { variant: "idle-juggling",    base: "idle" },
+  { variant: "idle-rainbow",     base: "idle" },
+  { variant: "idle-meditation",  base: "idle" },
+];
+
+function startDemoMode() {
+  demoActive = true;
+  demoIndex = 0;
+  console.log("Demo mode started — cycling through", DEMO_SEQUENCE.length, "states");
+  // Show first state immediately
+  advanceDemo();
+  demoInterval = setInterval(advanceDemo, 6000);
+}
+
+function advanceDemo() {
+  if (!win || win.isDestroyed()) return;
+  const entry = DEMO_SEQUENCE[demoIndex];
+  demoIndex = (demoIndex + 1) % DEMO_SEQUENCE.length;
+  console.log("Demo:", entry.variant);
+  win.webContents.send("force-variant", { variant: entry.variant, baseState: entry.base });
+}
+
+function stopDemoMode() {
+  demoActive = false;
+  if (demoInterval) { clearInterval(demoInterval); demoInterval = null; }
+  demoIndex = 0;
+  console.log("Demo mode stopped");
+  writeStatus("idle");
+}
+
 // ── Progression System ──────────────────────────────────────────────────────
 
 const XP_RATES = {
@@ -741,8 +826,9 @@ function createWindow() {
     }
   });
 
-  // Watch status file for immediate reaction
+  // Watch status file for immediate reaction (skip during demo mode)
   fs.watch(STATUS_FILE, () => {
+    if (demoActive) return;
     try {
       const { status, context } = readStatusFile();
       if (status !== currentStatus) {
@@ -765,14 +851,17 @@ function createWindow() {
   // Poll every second as backup + handle auto-idle revert + XP ticks
   setInterval(() => {
     try {
-      const { status, context } = readStatusFile();
+      // Skip status file polling during demo mode (force-variant controls renderer)
+      if (!demoActive) {
+        const { status, context } = readStatusFile();
 
-      if (status !== currentStatus) {
-        currentStatus = status;
-        currentContext = context;
-        lastChangeTime = Date.now();
-        progression.trackStateChange(status);
-        win.webContents.send("status-change", status, context);
+        if (status !== currentStatus) {
+          currentStatus = status;
+          currentContext = context;
+          lastChangeTime = Date.now();
+          progression.trackStateChange(status);
+          win.webContents.send("status-change", status, context);
+        }
       }
 
       // Award XP for current activity (use variant when active)
@@ -814,18 +903,20 @@ function createWindow() {
 
       const elapsed = Date.now() - lastChangeTime;
 
-      // Auto-revert transient states → idle after timeout
-      const quickRevert = ["success", "error"];
-      const slowRevert = [
-        "thinking", "coding", "searching", "reading", "debugging",
-        "installing", "testing", "deploying", "cooking", "hatching",
-        "deleting", "downloading",
-      ];
+      // Auto-revert transient states → idle after timeout (skip during demo)
+      if (!demoActive) {
+        const quickRevert = ["success", "error"];
+        const slowRevert = [
+          "thinking", "coding", "searching", "reading", "debugging",
+          "installing", "testing", "deploying", "cooking", "hatching",
+          "deleting", "downloading",
+        ];
 
-      if (quickRevert.includes(currentStatus) && elapsed > 5000) {
-        writeStatus("idle");
-      } else if (slowRevert.includes(currentStatus) && elapsed > 120_000) {
-        writeStatus("idle");
+        if (quickRevert.includes(currentStatus) && elapsed > 5000) {
+          writeStatus("idle");
+        } else if (slowRevert.includes(currentStatus) && elapsed > 120_000) {
+          writeStatus("idle");
+        }
       }
     } catch (e) {
       // ignore
@@ -975,6 +1066,24 @@ function buildTrayMenu(hooksActive) {
         speechBubblesEnabled = item.checked;
         win.webContents.send("speech-toggle", speechBubblesEnabled);
         saveSettings();
+      },
+    },
+    {
+      label: "Demo Mode",
+      type: "checkbox",
+      checked: demoActive,
+      click: (item) => {
+        if (item.checked) {
+          // Force speech bubbles on during demo
+          if (!speechBubblesEnabled) {
+            speechBubblesEnabled = true;
+            win.webContents.send("speech-toggle", true);
+          }
+          startDemoMode();
+        } else {
+          stopDemoMode();
+        }
+        tray.setContextMenu(buildTrayMenu(hooksActive));
       },
     },
     { type: "separator" },

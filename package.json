@@ -16,7 +16,8 @@
     "set-success": "node set-status.js success",
     "set-error": "node set-status.js error",
     "relay": "node relay-server.js",
-    "relay:dev": "RELAY_TOKEN=dev-token node relay-server.js"
+    "relay:watch": "node --watch relay-server.js",
+    "relay:dev": "RELAY_TOKEN=dev-token node --watch relay-server.js"
   },
   "build": {
     "appId": "com.claude-code-pet.app",

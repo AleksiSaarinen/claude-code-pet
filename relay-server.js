@@ -290,12 +290,15 @@ function runClaudeTask(prompt) {
           }
         }
 
-        // Tool use events — these are what the pet reacts to
+        // Tool use events — forward with details (file, command, etc.)
         if (event.type === "tool_use" || event.type === "tool_result") {
+          const input = event.input || {};
+          const detail = input.file_path || input.path || input.command || input.pattern || input.query || input.description || null;
           broadcast({
             type: "tool_event",
             tool: event.name || event.tool_name || null,
             status: event.type,
+            detail: detail ? shorten(String(detail), 80) : null,
           });
         }
 

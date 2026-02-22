@@ -34,6 +34,36 @@
     border-radius: 16px;
   }
 
+  /* ── Top bar (expanded only) ── */
+  .top-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px 0;
+    flex-shrink: 0;
+  }
+  .container.expanded .top-bar { display: flex; }
+
+  /* ── Keyboard mode: hide pet to maximize chat space ── */
+  .container.keyboard-mode .pet-area { display: none; }
+  .container.keyboard-mode .expanded-status { display: none; }
+  .container.keyboard-mode .top-bar { padding-top: 4px; }
+  .top-bar .right-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .top-bar .close-btn {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .top-bar .close-btn:active { color: #e94560; }
+
   /* ── Pet area ── */
   .pet-area {
     position: relative;
@@ -46,21 +76,6 @@
     padding-top: 4px;
     flex-shrink: 0;
   }
-  .container.expanded .speech-bubble {
-    top: auto;
-    bottom: -4px;
-    transform: translateX(-50%);
-  }
-  .container.expanded .speech-bubble::after {
-    /* Flip arrow to point up */
-    top: -6px;
-    bottom: auto;
-    border-top: none;
-    border-bottom: 6px solid rgba(255, 255, 255, 0.93);
-  }
-  .container.expanded .speech-bubble.visible {
-    transform: translateX(-50%) scale(1);
-  }
 
   #petCanvas {
     width: 120px;
@@ -71,6 +86,40 @@
   .container.expanded #petCanvas {
     width: 80px;
     height: 80px;
+  }
+
+  /* ── Speech bubble — expanded: left of character ── */
+  .container.expanded .speech-bubble {
+    top: 50%;
+    left: auto;
+    right: calc(50% + 48px);
+    transform: translateY(-50%);
+    transform-origin: center right;
+    max-width: 120px;
+    font-size: 9px;
+  }
+  .container.expanded .speech-bubble::after {
+    /* Arrow points right toward character */
+    top: 50%;
+    bottom: auto;
+    left: auto;
+    right: -6px;
+    transform: translateY(-50%);
+    border-left: 6px solid rgba(255, 255, 255, 0.93);
+    border-right: none;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+  }
+  .container.expanded .speech-bubble.visible {
+    transform: translateY(-50%) scale(1);
+  }
+  @keyframes speech-pop-side {
+    0% { transform: translateY(-50%) scale(0.7); opacity: 0; }
+    60% { transform: translateY(-50%) scale(1.05); }
+    100% { transform: translateY(-50%) scale(1); opacity: 1; }
+  }
+  .container.expanded .speech-bubble.visible {
+    animation: speech-pop-side 0.25s ease-out;
   }
 
   /* ── Loading overlay ── */
@@ -109,18 +158,25 @@
 
   /* ── Status dot ── */
   .status-dot {
-    position: absolute;
-    top: 32px;
-    right: 12px;
     width: 10px;
     height: 10px;
     border-radius: 50%;
     background: #e94560;
     border: 1.5px solid rgba(0,0,0,0.3);
     transition: background 0.3s;
+    flex-shrink: 0;
   }
   .status-dot.connected { background: #4ade80; }
   .status-dot.connecting { background: #fbbf24; }
+  /* In collapsed mode, position absolute in pet area */
+  .container:not(.expanded) .status-dot {
+    position: absolute;
+    top: 32px;
+    right: 12px;
+  }
+  /* In expanded mode, it lives in the top bar (flow layout) */
+  .container.expanded .pet-area .status-dot { display: none; }
+  .container:not(.expanded) .top-bar-dot { display: none; }
 
   /* ── Speech bubble ── */
   .speech-bubble {
@@ -183,13 +239,20 @@
   }
   .container:not(.expanded) .status-badge { display: none; }
   .container.expanded .status-label { display: none; }
+  .expanded-status {
+    text-align: center;
+    flex-shrink: 0;
+    padding: 2px 0 4px;
+    display: none;
+  }
+  .container.expanded .expanded-status { display: block; }
 
   /* ── Expanded panel ── */
   .panel {
     display: none;
     flex-direction: column;
     flex: 1;
-    padding: 8px 12px 12px;
+    padding: 4px 12px 12px;
     min-height: 0;
   }
   .container.expanded .panel { display: flex; }
@@ -246,17 +309,6 @@
   .btn.cancel { background: #30363d; }
   .btn:disabled { opacity: 0.4; }
 
-  .panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
-  }
-  .panel-header .title {
-    font-size: 13px;
-    font-weight: 600;
-    color: #e94560;
-  }
   .status-badge {
     font-size: 10px;
     color: #0d1117;
@@ -265,17 +317,8 @@
     border-radius: 10px;
     text-transform: capitalize;
     font-weight: 600;
+    display: inline-block;
   }
-  .panel-header .close-btn {
-    background: none;
-    border: none;
-    color: #8b949e;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0 4px;
-    line-height: 1;
-  }
-  .panel-header .close-btn:active { color: #e94560; }
 
   /* ── Character selector button ── */
   .char-btn {
@@ -401,6 +444,16 @@
     <div class="loading-spinner"></div>
     <div class="loading-text">Loading character...</div>
   </div>
+
+  <!-- Top bar (expanded only): char selector | dot + close -->
+  <div class="top-bar">
+    <button class="char-btn" id="charBtn"><span class="char-icon">&#x1F3AD;</span> <span id="charBtnLabel">Character</span></button>
+    <div class="right-group">
+      <div class="status-dot top-bar-dot" id="statusDotExpanded"></div>
+      <button class="close-btn" id="collapseBtn">&times;</button>
+    </div>
+  </div>
+
   <div class="pet-area" id="petArea">
     <div class="speech-bubble" id="speechBubble">
       <span class="speech-text" id="speechText"></span>
@@ -410,13 +463,12 @@
   </div>
   <div class="status-label" id="statusLabel">idle</div>
 
+  <!-- Status badge centered below pet (expanded only) -->
+  <div class="expanded-status">
+    <span class="status-badge" id="statusBadge">idle</span>
+  </div>
+
   <div class="panel">
-    <div class="panel-header">
-      <span class="title">Claude Code</span>
-      <span class="status-badge" id="statusBadge">idle</span>
-      <button class="char-btn" id="charBtn"><span class="char-icon">&#x1F3AD;</span> <span id="charBtnLabel">Character</span></button>
-      <button class="close-btn" id="collapseBtn">&times;</button>
-    </div>
     <div class="output-area" id="output"></div>
     <div class="input-row">
       <input type="text" id="promptInput" placeholder="Ask Claude..." autocomplete="off" />
@@ -474,6 +526,7 @@ const collapseBtn = document.getElementById("collapseBtn");
 const petArea = document.getElementById("petArea");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const statusBadge = document.getElementById("statusBadge");
+const statusDotExpanded = document.getElementById("statusDotExpanded");
 const charBtn = document.getElementById("charBtn");
 const charBtnLabel = document.getElementById("charBtnLabel");
 const charPicker = document.getElementById("charPicker");
@@ -483,6 +536,11 @@ const charPickerClose = document.getElementById("charPickerClose");
 let isExpanded = false;
 let currentStatus = "idle";
 let isRunning = false;
+
+function setDotClass(cls) {
+  statusDot.className = cls;
+  statusDotExpanded.className = cls + " top-bar-dot";
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SpriteRenderer (adapted from pet.html — uses HTTP URLs instead of file://)
@@ -1000,7 +1058,7 @@ class RelayClient {
     const wsUrl = `${protocol}//${location.host}`;
 
     this.ws = new WebSocket(wsUrl);
-    statusDot.className = "status-dot connecting";
+    setDotClass("status-dot connecting");
 
     this.ws.onopen = () => {
       this.ws.send(JSON.stringify({ type: "auth", token: TOKEN }));
@@ -1014,7 +1072,7 @@ class RelayClient {
 
     this.ws.onclose = () => {
       this.connected = false;
-      statusDot.className = "status-dot";
+      setDotClass("status-dot");
       this._stopPing();
       setTimeout(() => {
         this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
@@ -1032,7 +1090,7 @@ class RelayClient {
       case "auth_ok":
         this.connected = true;
         this.reconnectDelay = 1000;
-        statusDot.className = "status-dot connected";
+        setDotClass("status-dot connected");
         this._startPing();
         appendOutput("Connected to relay", "system-msg");
         break;
@@ -1060,8 +1118,10 @@ class RelayClient {
         break;
 
       case "tool_event":
-        if (msg.tool) {
-          appendOutput(`\u{1F527} ${msg.tool} (${msg.status})`, "tool-msg");
+        if (msg.tool && msg.status === "tool_use") {
+          // Show tool with detail: "Read → main.js", "Edit → OverlayService.kt"
+          const toolLabel = msg.detail ? `${msg.tool} \u2192 ${msg.detail.replace(/\\/g, "/").split("/").pop()}` : msg.tool;
+          appendOutput(`\u{1F527} ${toolLabel}`, "tool-msg");
         }
         break;
 
@@ -1412,7 +1472,7 @@ async function init() {
     relay.connect();
   } else {
     appendOutput("No token provided — add ?token=xxx to URL", "error-msg");
-    statusDot.className = "status-dot";
+    setDotClass("status-dot");
   }
 
   startIdleSpeech();

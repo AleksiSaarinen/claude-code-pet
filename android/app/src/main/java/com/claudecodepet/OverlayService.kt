@@ -304,15 +304,25 @@ class OverlayService : Service() {
     private fun setKeyboardMode(visible: Boolean) {
         if (visible == isKeyboardMode) return
         isKeyboardMode = visible
+        val display = windowManager.defaultDisplay
+        val screenH = display.height
         if (visible) {
-            // Remove NOT_FOCUSABLE so keyboard can open, move overlay to top
+            // Remove NOT_FOCUSABLE so keyboard can open, move to top, shrink to fit above keyboard
             preKeyboardY = params.y
             params.y = 0
+            // Don't change height — just move to top and let web page handle layout
             params.flags = 0 // no flags = focusable
             params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         } else {
-            // Restore NOT_FOCUSABLE and position
-            params.y = preKeyboardY
+            // Restore NOT_FOCUSABLE, position, and full expanded height
+            if (isExpanded) {
+                // Restore to centered expanded position
+                val screenW = display.width
+                params.x = (screenW - expandedW) / 2
+                params.y = (screenH * 0.08).toInt()
+            } else {
+                params.y = preKeyboardY
+            }
             params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
             if (!isExpanded) {

@@ -128,5 +128,70 @@ RELAY_TOKEN="secret" RELAY_PROJECT_DIR="/path/to/project" node relay-server.js
 - Watches the same pet status file the desktop app uses → broadcasts `pet_status` to phone
 - See `MOBILE-RELAY.md` for full protocol docs, security notes, and Cloudflare Tunnel setup
 
+### HTTP routes (for mobile client):
+- `GET /mobile` → serves `mobile/index.html`
+- `GET /characters` → JSON array of `{ id, name }` for all available characters
+- `GET /characters/<name>/<file>` → character assets (PNGs, JSON) with MIME types
+- Path traversal protection (rejects `..` and validates resolved paths)
+
+### IMPORTANT — `claude -p` concurrency limitation:
+- The relay spawns `claude -p` to handle prompts. **Only one Claude Code instance can run on a machine at a time.**
+- If you have an interactive Claude Code session open in a terminal, `claude -p` from the relay will hang silently.
+- **Always run the relay standalone** — close any Claude Code sessions first, then start the relay in a plain terminal.
+- The relay strips the `CLAUDECODE` env var from spawned processes to avoid the nested-session check, but shared session locks still prevent concurrent usage.
+
+## Mobile Pet Page
+`mobile/index.html` — self-contained HTML page served by the relay, renders the pet in a phone browser or Android WebView overlay.
+
+### Features:
+- **SpriteRenderer** adapted from pet.html — loads character assets over HTTP from relay server
+- **Full speech system** — all 360+ messages, streaks, time-of-day, rare/easter eggs, idle chatter
+- **RelayClient** — WebSocket to same origin, auto-reconnect with exponential backoff, ping/pong keepalive
+- **Collapsed mode** (150×165): pet canvas, speech bubble, status dot, status label — tap to expand
+- **Expanded mode** (320×500): smaller pet + scrolling output area + prompt input + send/cancel buttons
+- **AndroidBridge** — calls `AndroidBridge.setExpanded(bool)` to resize native overlay window
+- Token from URL param: `?token=xxx`, character: `?char=pixel-claude`
+- Connection status dot: green (connected), red (disconnected), yellow (connecting)
+
+### Testing in browser:
+```
+http://localhost:3777/mobile?token=dev-token
+```
+
+## Android Floating Pet App
+`android/` — native Kotlin app with a floating WebView overlay that shows the mobile pet page.
+
+### Project structure:
+- `MainActivity.kt` — config screen (server URL + token inputs), overlay permission request, start/stop service
+- `OverlayService.kt` — foreground service, floating WebView via WindowManager, drag handling, expand/collapse
+- `PetPreferences.kt` — SharedPreferences wrapper for URL, token, character, overlay position
+
+### Key details:
+- **Overlay:** `TYPE_APPLICATION_OVERLAY`, `FLAG_NOT_FOCUSABLE` when collapsed, focusable when expanded
+- **Drag:** touch listener with drag threshold, saves position to SharedPreferences
+- **JS Bridge:** `AndroidBridge.setExpanded(bool)` resizes native overlay and toggles focus flags
+- **Soft keyboard:** `SOFT_INPUT_ADJUST_RESIZE` in expanded mode allows text input
+- **Permissions:** INTERNET, SYSTEM_ALERT_WINDOW, FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE
+- **Build:** min SDK 26, target SDK 36, AGP 8.2.2, Kotlin 1.9.22
+
+### Building APK:
+```bash
+cd android
+# Windows CMD:
+set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
+set ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk
+.\gradlew.bat assembleDebug
+# APK at: app/build/outputs/apk/debug/app-debug.apk
+
+# Install via adb:
+%ANDROID_HOME%\platform-tools\adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Usage:
+1. Start relay in a **standalone terminal** (no Claude Code session running): `set RELAY_TOKEN=mytoken && node relay-server.js`
+2. Open app on phone, enter `http://<pc-ip>:3777` + token
+3. Grant overlay permission, tap Start Pet Overlay
+4. Pet floats on screen, syncs animations live, tap to expand and send prompts
+
 ## All App States
 idle, coding, thinking, success, error, searching, reading, debugging, installing, testing, deploying, cooking, hatching, deleting, downloading

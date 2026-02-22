@@ -74,6 +74,7 @@ class OverlayService : Service() {
     private fun setupWebView() {
         webView = WebView(this)
         webView.setBackgroundColor(0x00000000) // transparent
+        WebView.setWebContentsDebuggingEnabled(true)
 
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -85,6 +86,8 @@ class OverlayService : Service() {
 
         webView.webViewClient = WebViewClient()
         webView.addJavascriptInterface(PetBridge(), "AndroidBridge")
+        webView.isFocusable = true
+        webView.isFocusableInTouchMode = true
 
         val url = prefs.getMobileUrl()
         webView.loadUrl(url)
@@ -158,15 +161,21 @@ class OverlayService : Service() {
         if (expanded) {
             params.width = expandedW
             params.height = expandedH
-            // Remove NOT_FOCUSABLE so user can type
-            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            // Remove NOT_FOCUSABLE so user can type, keep layout flags
+            params.flags = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         } else {
             params.width = collapsedW
             params.height = collapsedH
             // Re-add NOT_FOCUSABLE so touches pass through
-            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         }
         windowManager.updateViewLayout(webView, params)
+        if (expanded) {
+            webView.requestFocus()
+        }
     }
 
     private fun createNotificationChannel() {

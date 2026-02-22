@@ -37,28 +37,62 @@ Control Claude Code from your phone through your pet. Send prompts, watch her re
 └─────────────────────────────┘
 ```
 
-## Setup
+## Quick Start (new machine)
+
+```bash
+# 1. Clone and install
+git clone https://github.com/AleksiSaarinen/claude-code-pet.git
+cd claude-code-pet
+npm install
+
+# 2. Start the relay (in its own terminal — NOT inside Claude Code)
+#    Windows CMD — IMPORTANT: quotes prevent trailing space in token
+set "RELAY_TOKEN=dev-token" && node --watch relay-server.js
+
+#    PowerShell:
+$env:RELAY_TOKEN="dev-token"; node --watch relay-server.js
+
+#    Linux/Mac:
+RELAY_TOKEN=dev-token node --watch relay-server.js
+
+# 3. Point it at a different project (optional):
+set "RELAY_TOKEN=dev-token" && set "RELAY_PROJECT_DIR=C:\path\to\project" && node --watch relay-server.js
+
+# 4. Open on phone browser (same WiFi):
+#    http://<your-pc-ip>:3777/mobile?token=dev-token
+
+# 5. Or install the Android floating overlay app:
+#    See "Android App" section below
+```
+
+> **`--watch`** auto-restarts the relay when relay-server.js changes (built into Node 18+).
+
+> **Windows CMD gotcha**: `set RELAY_TOKEN=dev-token && node ...` includes the trailing space in the token! Always use `set "RELAY_TOKEN=dev-token"` with quotes.
+
+> **Never start the relay from inside Claude Code's Bash tool** — it inherits session state and causes the nested-session error.
+
+## Setup (detailed)
 
 ### 1. Install dependencies
 
-The relay server uses only Node built-ins plus `ws` (WebSocket library):
-
 ```bash
 cd claude-code-pet
-npm install ws
+npm install    # installs ws (WebSocket library) + everything else
 ```
 
 ### 2. Run the relay server
 
+The relay must run in a **separate terminal** (not spawned from Claude Code):
+
 ```bash
-# Basic — runs in the current directory
-node relay-server.js
+# Windows CMD (recommended for dev):
+set "RELAY_TOKEN=dev-token" && node --watch relay-server.js
 
-# Point it at your Godot project
-RELAY_PROJECT_DIR="C:\Users\you\Projects\my-godot-game" node relay-server.js
+# With a custom project directory:
+set "RELAY_TOKEN=mytoken" && set "RELAY_PROJECT_DIR=C:\Users\you\Projects\my-project" && node --watch relay-server.js
 
-# With a fixed auth token (recommended)
-RELAY_TOKEN="my-secret-token-here" RELAY_PROJECT_DIR="C:\path\to\project" node relay-server.js
+# Without --watch (no auto-restart):
+set "RELAY_TOKEN=dev-token" && node relay-server.js
 ```
 
 On startup it prints:
@@ -66,66 +100,67 @@ On startup it prints:
 ```
 🐾 Claude Code Pet Relay Server
    Port:    3777
-   Project: C:\Users\you\Projects\my-godot-game
-   Token:   a1b2c3d4...
+   Project: C:\Users\you\Projects\my-project
+   Token:   dev-toke...
 
-   Connect from phone with:
-   ws://<your-ip>:3777
-   First message: { "type": "auth", "token": "..." }
+   Mobile pet page:
+   http://localhost:3777/mobile?token=dev-token
 ```
 
-### 3. Expose to the internet (for "from anywhere" access)
+### 3. Connect from phone
 
-Install Cloudflare Tunnel (free, encrypted, no open ports):
+**Same WiFi (easiest):** Open `http://<your-pc-ip>:3777/mobile?token=dev-token` in your phone browser.
+
+**From anywhere (Cloudflare Tunnel):**
 
 ```bash
-# Install cloudflared
-# Windows: winget install cloudflare.cloudflared
-# Mac: brew install cloudflared
-# Linux: see https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
-
-# Run the tunnel
+# Install: winget install cloudflare.cloudflared  (or brew install cloudflared)
 cloudflared tunnel --url http://localhost:3777
 ```
 
-It gives you a URL like `https://random-words.trycloudflare.com` — this is your phone's connection point. Encrypted, temporary (regenerates each run), and only people with your auth token can use it.
+This gives you a URL like `https://random-words.trycloudflare.com` — open `https://random-words.trycloudflare.com/mobile?token=dev-token` on your phone. Encrypted, temporary (regenerates each run), and only people with your auth token can use it.
 
-For same-WiFi use, just use your PC's local IP directly: `ws://192.168.1.xxx:3777`
+### 4. Android floating overlay app (optional)
 
-### 4. Connect from phone
+The Android app shows the pet as a floating overlay on your phone screen.
 
-The phone app connects via WebSocket and authenticates:
+```bash
+cd android
 
-```js
-// Phone-side connection
-const ws = new WebSocket("wss://random-words.trycloudflare.com");
+# Windows CMD:
+set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
+set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+.\gradlew.bat assembleDebug
 
-ws.onopen = () => {
-  ws.send(JSON.stringify({ type: "auth", token: "your-token-here" }));
-};
-
-ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  switch (msg.type) {
-    case "auth_ok":       // Connected! msg.project = project dir
-    case "pet_status":    // msg.status, msg.context → update pet animation + speech bubble
-    case "task_start":    // Claude started working → msg.prompt
-    case "stream":        // Live text output → msg.text
-    case "tool_event":    // Tool used → msg.tool, msg.status
-    case "output":        // Chunk of text output → msg.text
-    case "task_done":     // Done! → msg.code, msg.duration, msg.summary
-    case "task_cancelled":// User cancelled
-    case "queued":        // Task queued → msg.position
-    case "error":         // Something went wrong → msg.message
-  }
-};
-
-// Send a prompt
-ws.send(JSON.stringify({ type: "prompt", prompt: "Add a health bar to the player HUD" }));
-
-// Cancel current task
-ws.send(JSON.stringify({ type: "cancel" }));
+# Install via adb (phone connected via USB with USB debugging on):
+%ANDROID_HOME%\platform-tools\adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
+
+On the phone app:
+1. Enter `http://<your-pc-ip>:3777` as server URL + your token
+2. Grant overlay permission when prompted
+3. Tap **Start Pet Overlay**
+4. Pet floats on screen — tap to expand, send prompts, see output
+
+## Features
+
+### Plan Mode
+Tap the **Plan** toggle before sending a prompt. Claude will analyze and plan without making changes. After the plan streams in, you get:
+- **Approve** — execute the plan
+- **Edit** — type feedback to revise the plan
+- **Cancel** — discard and return to normal
+
+### New Chat
+Tap the **+** button in the top bar to clear the conversation session. Use this when:
+- Switching to a different task
+- Claude seems confused or slow (context bloat from long sessions)
+- Starting fresh the next day
+
+### Variant Animations
+The mobile pet rolls variant animations just like the desktop app — `coding-flow`, `thinking-eureka`, `idle-dancing`, `searching-treasure`, etc. Idle variants cycle every 12 seconds.
+
+### Reconnect Resilience
+If the WebSocket drops and reconnects (common on mobile), the relay sends buffered output so you don't miss what happened during the disconnect.
 
 ## Message Protocol
 
@@ -134,8 +169,10 @@ ws.send(JSON.stringify({ type: "cancel" }));
 | Message | Description |
 |---------|-------------|
 | `{ type: "auth", token: "..." }` | First message, must authenticate |
-| `{ type: "prompt", prompt: "..." }` | Send a task to Claude Code |
+| `{ type: "prompt", prompt: "...", planMode: bool }` | Send a task (planMode: true = plan only, don't execute) |
+| `{ type: "execute_plan" }` | Execute the last plan Claude created |
 | `{ type: "cancel" }` | Cancel the currently running task |
+| `{ type: "new_conversation" }` | Clear session — next prompt starts fresh |
 | `{ type: "status" }` | Request current pet status |
 | `{ type: "ping" }` | Keep-alive ping |
 
@@ -145,14 +182,15 @@ ws.send(JSON.stringify({ type: "cancel" }));
 |---------|-------------|
 | `{ type: "auth_ok", project }` | Authenticated successfully |
 | `{ type: "auth_fail" }` | Bad token, connection closed |
-| `{ type: "pet_status", status, context }` | Pet status update (same as desktop pet gets) |
-| `{ type: "task_start", prompt }` | Claude started working on your prompt |
+| `{ type: "pet_status", status, context }` | Pet status update (from hook or inferred from tools) |
+| `{ type: "task_start", prompt, phase }` | Claude started working (phase: "plan", "execute", or "normal") |
 | `{ type: "stream", text }` | Live text token from Claude |
-| `{ type: "tool_event", tool, status }` | Claude used a tool (Edit, Bash, Read, etc.) |
+| `{ type: "tool_event", tool, status, detail }` | Claude used a tool (Edit, Bash, Read, etc.) |
 | `{ type: "output", text }` | Chunk of Claude's output |
-| `{ type: "task_done", code, duration, summary }` | Task finished |
+| `{ type: "task_done", code, duration, summary, phase }` | Task finished (phase: "plan" shows approve/edit/cancel UI) |
 | `{ type: "task_cancelled" }` | Task was cancelled |
 | `{ type: "queued", position, prompt }` | Task added to queue |
+| `{ type: "info", message }` | Informational message (e.g. "New conversation started") |
 | `{ type: "error", message }` | Something went wrong |
 | `{ type: "pong" }` | Response to ping |
 
@@ -216,9 +254,9 @@ Create `start-relay.bat`:
 
 ```batch
 @echo off
-set RELAY_TOKEN=your-secret-token
-set RELAY_PROJECT_DIR=C:\Users\you\Projects\my-godot-game
-node "%~dp0relay-server.js"
+set "RELAY_TOKEN=your-secret-token"
+set "RELAY_PROJECT_DIR=C:\Users\you\Projects\my-project"
+node --watch "%~dp0relay-server.js"
 ```
 
 ## What's Next

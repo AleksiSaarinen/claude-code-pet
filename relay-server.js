@@ -229,6 +229,7 @@ function runClaudeTask(prompt) {
   ], {
     cwd: PROJECT_DIR,
     shell: true,
+    stdio: ["ignore", "pipe", "pipe"],
     env: (() => { const e = { ...process.env }; delete e.CLAUDECODE; return e; })(),
   });
 

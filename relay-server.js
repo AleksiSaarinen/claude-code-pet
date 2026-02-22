@@ -272,7 +272,9 @@ function handlePrompt(msg, ws) {
       }
     }
     if (attachmentPaths.length > 0) {
-      const refs = attachmentPaths.map(a => `[Attached image "${a.name}" saved at: ${a.path}]`).join("\n");
+      const refs = attachmentPaths.map(a =>
+        `The user attached an image file "${a.name}". Read it with your Read tool at this absolute path: ${a.path}`
+      ).join("\n");
       prompt = `${refs}\n\n${prompt}`;
     }
   }

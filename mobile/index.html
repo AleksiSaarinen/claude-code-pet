@@ -1546,7 +1546,29 @@ function sendPrompt() {
 }
 
 // ── Attachment handling ──
-attachBtn.addEventListener("click", () => fileInput.click());
+attachBtn.addEventListener("click", () => {
+  if (typeof AndroidBridge !== "undefined" && AndroidBridge.openFilePicker) {
+    // Android overlay: native file picker bypasses WebView user gesture issues
+    AndroidBridge.openFilePicker();
+  } else {
+    fileInput.click();
+  }
+});
+
+// Called by Android native code after user picks a file
+window._onAndroidFilePicked = function(name, mimeType, base64Data, size) {
+  pendingAttachment = {
+    name: name,
+    mimeType: mimeType,
+    data: base64Data,
+    size: size,
+  };
+  attachThumb.src = "data:" + mimeType + ";base64," + base64Data;
+  attachName.textContent = name;
+  attachSize.textContent = formatSize(size);
+  attachPreview.classList.add("visible");
+  attachBtn.classList.add("has-file");
+};
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];

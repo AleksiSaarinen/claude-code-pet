@@ -336,6 +336,11 @@ class OverlayService : Service() {
         }
     }
 
+    // Run JavaScript in the WebView (called from FileChooserActivity)
+    fun evaluateJs(js: String) {
+        webView.post { webView.evaluateJavascript(js, null) }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
@@ -406,6 +411,19 @@ class OverlayService : Service() {
         @JavascriptInterface
         fun setKeyboardVisible(visible: Boolean) {
             webView.post { setKeyboardMode(visible) }
+        }
+
+        @JavascriptInterface
+        fun openFilePicker() {
+            webView.post {
+                if (isExpanded) {
+                    hideForFilePicker()
+                    FileChooserActivity.directMode = true
+                    val activityIntent = Intent(this@OverlayService, FileChooserActivity::class.java)
+                    activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(activityIntent)
+                }
+            }
         }
     }
 }

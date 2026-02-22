@@ -17,7 +17,10 @@ import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
+import android.webkit.ValueCallback
+import android.net.Uri
 import android.view.inputmethod.InputMethodManager
 
 class OverlayService : Service() {
@@ -26,6 +29,7 @@ class OverlayService : Service() {
         const val CHANNEL_ID = "pet_overlay_channel"
         const val NOTIFICATION_ID = 1
         var isRunning = false
+        var instance: OverlayService? = null
     }
 
     private lateinit var windowManager: WindowManager
@@ -63,6 +67,7 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        instance = this
 
         prefs = PetPreferences(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -95,6 +100,30 @@ class OverlayService : Service() {
         settings.loadWithOverviewMode = false
 
         webView.webViewClient = WebViewClient()
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                FileChooserActivity.fileCallback?.onReceiveValue(null)
+                FileChooserActivity.fileCallback = filePathCallback
+                val intent = fileChooserParams?.createIntent() ?: return false
+                try {
+                    hideForFilePicker()
+                    val chooserIntent = Intent.createChooser(intent, "Select Image")
+                    val activityIntent = Intent(this@OverlayService, FileChooserActivity::class.java)
+                    activityIntent.putExtra("chooser_intent", chooserIntent)
+                    activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(activityIntent)
+                    return true
+                } catch (e: Exception) {
+                    FileChooserActivity.fileCallback?.onReceiveValue(null)
+                    FileChooserActivity.fileCallback = null
+                    return false
+                }
+            }
+        }
         webView.addJavascriptInterface(PetBridge(), "AndroidBridge")
         webView.isFocusable = true
         webView.isFocusableInTouchMode = true
@@ -291,9 +320,26 @@ class OverlayService : Service() {
         }
     }
 
+    // Hide overlay temporarily while file picker is open
+    fun hideForFilePicker() {
+        webView.post {
+            hideScrim()
+            webView.visibility = View.INVISIBLE
+        }
+    }
+
+    // Restore overlay after file picker closes
+    fun restoreAfterFilePicker() {
+        webView.post {
+            webView.visibility = View.VISIBLE
+            if (isExpanded) showScrim()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        instance = null
         hideScrim()
         try {
             windowManager.removeView(webView)

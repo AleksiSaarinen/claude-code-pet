@@ -25,6 +25,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".FileChooserActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize" />
+
         <service
             android:name=".OverlayService"
             android:exported="false"

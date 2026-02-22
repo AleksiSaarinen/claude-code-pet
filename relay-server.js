@@ -18,6 +18,8 @@ const os = require("os");
 const PORT = process.env.RELAY_PORT || 3777;
 const AUTH_TOKEN = process.env.RELAY_TOKEN || generateToken();
 const PROJECT_DIR = process.env.RELAY_PROJECT_DIR || process.cwd();
+const TEMP_PREFIX = "claude-pet-attach-";
+let taskTempFiles = []; // temp files for current task, cleaned up on task_done
 
 // Pet status file — same one the desktop app uses
 function getPetStatusFile() {
@@ -133,11 +135,14 @@ const server = http.createServer((req, res) => {
 
 // ── WebSocket Server ───────────────────────────────────────────────────────
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 16 * 1024 * 1024 });
 const clients = new Set();
 let activeTask = null; // only one Claude task at a time
 let taskQueue = [];
 let lastSessionId = null; // track conversation session for --resume
+let planSessionId = null; // session ID saved after a plan phase completes
+let taskOutputBuffer = []; // buffered output for reconnecting clients
+let lastTaskResult = null; // last task_done msg (for clients that reconnect just after)
 
 // Persist session ID to survive relay restarts
 const SESSION_FILE = path.join(path.dirname(STATUS_FILE), "relay-session-id.txt");
@@ -170,6 +175,19 @@ wss.on("connection", (ws, req) => {
         ws.send(JSON.stringify({ type: "auth_ok", project: PROJECT_DIR }));
         // Send current status
         sendCurrentStatus(ws);
+        // Catch up reconnecting clients on active/recent task
+        if (activeTask) {
+          ws.send(JSON.stringify({
+            type: "task_start",
+            prompt: shorten(activeTask.prompt, 80),
+            phase: activeTask.isPlan ? "plan" : activeTask.isExecute ? "execute" : "normal",
+          }));
+          for (const data of taskOutputBuffer) {
+            ws.send(data);
+          }
+        } else if (lastTaskResult && (Date.now() - lastTaskResult._ts < 30000)) {
+          ws.send(JSON.stringify(lastTaskResult));
+        }
         console.log(`[relay] Client authenticated (${clients.size} connected)`);
       } else {
         ws.send(JSON.stringify({ type: "auth_fail" }));
@@ -188,8 +206,13 @@ wss.on("connection", (ws, req) => {
         cancelTask();
         break;
 
+      case "execute_plan":
+        handleExecutePlan(ws);
+        break;
+
       case "new_conversation":
         lastSessionId = null;
+        planSessionId = null;
         try { fs.unlinkSync(SESSION_FILE); } catch {}
         console.log("[relay] Starting fresh conversation");
         broadcast({ type: "info", message: "New conversation started" });
@@ -217,25 +240,95 @@ wss.on("connection", (ws, req) => {
 // ── Prompt Handler — spawns Claude Code CLI ────────────────────────────────
 
 function handlePrompt(msg, ws) {
-  const prompt = msg.prompt;
-  if (!prompt || typeof prompt !== "string") {
+  let prompt = msg.prompt;
+  if ((!prompt || typeof prompt !== "string") && !Array.isArray(msg.attachments)) {
     ws.send(JSON.stringify({ type: "error", message: "Missing prompt" }));
     return;
+  }
+  if (!prompt || typeof prompt !== "string") prompt = "(see attached image)";
+
+  // Process attachments — save to temp files in project dir
+  if (Array.isArray(msg.attachments)) {
+    const attachmentPaths = [];
+    for (const att of msg.attachments) {
+      if (!att.data || !att.mimeType) continue;
+      const buf = Buffer.from(att.data, "base64");
+      if (buf.length > 10 * 1024 * 1024) {
+        ws.send(JSON.stringify({ type: "error", message: `Attachment too large: ${att.name} (${Math.round(buf.length / 1024 / 1024)}MB)` }));
+        continue;
+      }
+      const extMap = { "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" };
+      const ext = extMap[att.mimeType] || ".png";
+      const tempName = `${TEMP_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+      const tempPath = path.join(PROJECT_DIR, tempName);
+      try {
+        fs.writeFileSync(tempPath, buf);
+        attachmentPaths.push({ path: tempPath, name: att.name || tempName });
+        taskTempFiles.push(tempPath);
+        console.log(`[relay] Saved attachment: ${tempName} (${Math.round(buf.length / 1024)}KB)`);
+      } catch (e) {
+        console.error(`[relay] Failed to save attachment: ${e.message}`);
+        ws.send(JSON.stringify({ type: "error", message: `Failed to save attachment: ${e.message}` }));
+      }
+    }
+    if (attachmentPaths.length > 0) {
+      const refs = attachmentPaths.map(a => `[Attached image "${a.name}" saved at: ${a.path}]`).join("\n");
+      prompt = `${refs}\n\n${prompt}`;
+    }
   }
 
   if (activeTask) {
     // Queue it
-    taskQueue.push({ prompt, ws });
-    broadcast({ type: "queued", position: taskQueue.length, prompt: shorten(prompt, 60) });
+    taskQueue.push({ prompt, ws, planMode: msg.planMode });
+    broadcast({ type: "queued", position: taskQueue.length, prompt: shorten(msg.prompt || prompt, 60) });
     return;
   }
 
-  runClaudeTask(prompt);
+  // Clear pending plan if user sends a non-plan prompt
+  if (!msg.planMode) planSessionId = null;
+
+  if (msg.planMode) {
+    let wrapped;
+    if (planSessionId) {
+      // Revising an existing plan — user is giving feedback
+      wrapped = "Revise the plan based on this feedback. Still do NOT make any changes "
+        + "-- only update the plan.\n\nFeedback: " + prompt;
+    } else {
+      // Fresh plan request
+      wrapped = "Create a detailed implementation plan for the following task. "
+        + "Analyze the codebase, identify all files that need to change, and describe "
+        + "your approach step by step. Do NOT make any changes yet -- only plan.\n\nTask: " + prompt;
+    }
+    runClaudeTask(wrapped, { isPlan: true });
+  } else {
+    runClaudeTask(prompt);
+  }
 }
 
-function runClaudeTask(prompt) {
-  activeTask = { prompt, startTime: Date.now() };
-  broadcast({ type: "task_start", prompt: shorten(prompt, 80) });
+function handleExecutePlan(ws) {
+  if (!planSessionId) {
+    ws.send(JSON.stringify({ type: "error", message: "No plan to execute" }));
+    return;
+  }
+  if (activeTask) {
+    ws.send(JSON.stringify({ type: "error", message: "A task is already running" }));
+    return;
+  }
+  lastSessionId = planSessionId;
+  saveSessionId(lastSessionId);
+  planSessionId = null;
+  runClaudeTask("Now implement the plan you created above. Execute all the changes.", { isExecute: true });
+}
+
+function runClaudeTask(prompt, options = {}) {
+  const { isPlan = false, isExecute = false } = options;
+  activeTask = { prompt, startTime: Date.now(), isPlan, isExecute };
+  broadcast({
+    type: "task_start",
+    prompt: shorten(prompt, 80),
+    phase: isPlan ? "plan" : isExecute ? "execute" : "normal",
+  });
+  broadcastPetStatus("thinking");
 
   console.log(`[relay] Running: "${shorten(prompt, 60)}"`);
 
@@ -286,20 +379,31 @@ function runClaudeTask(prompt) {
           if (texts.length) {
             const text = texts.join("\n");
             resultText += text;
-            broadcast({ type: "output", text: shorten(text, 500) });
+            broadcast({ type: "output", text });
           }
         }
 
         // Tool use events — forward with details (file, command, etc.)
         if (event.type === "tool_use" || event.type === "tool_result") {
           const input = event.input || {};
+          const toolName = event.name || event.tool_name || null;
           const detail = input.file_path || input.path || input.command || input.pattern || input.query || input.description || null;
           broadcast({
             type: "tool_event",
-            tool: event.name || event.tool_name || null,
+            tool: toolName,
             status: event.type,
             detail: detail ? shorten(String(detail), 80) : null,
           });
+          // Update pet animation based on tool
+          if (event.type === "tool_use" && toolName) {
+            const petStatus = inferPetStatus(toolName, input);
+            const context = {};
+            if (input.file_path) context.file = input.file_path;
+            else if (input.path) context.file = input.path;
+            if (input.command) context.command = input.command;
+            if (input.pattern || input.query) context.query = input.pattern || input.query;
+            broadcastPetStatus(petStatus, context);
+          }
         }
 
         // Stream text deltas for live output
@@ -308,6 +412,8 @@ function runClaudeTask(prompt) {
             type: "stream",
             text: event.event.delta.text || "",
           });
+          // Show thinking when Claude is writing text (between tool calls)
+          broadcastPetStatus("thinking");
         }
 
       } catch {
@@ -329,22 +435,31 @@ function runClaudeTask(prompt) {
   claude.on("close", (code) => {
     if (!activeTask) return; // already cancelled
     const duration = Date.now() - activeTask.startTime;
-    console.log(`[relay] Task completed (code ${code}, ${Math.round(duration / 1000)}s)`);
+    const wasPlan = activeTask.isPlan;
+    console.log(`[relay] Task completed (code ${code}, ${Math.round(duration / 1000)}s, phase: ${wasPlan ? "plan" : activeTask.isExecute ? "execute" : "normal"})`);
+
+    if (wasPlan && code === 0) planSessionId = lastSessionId;
+
+    // Animate pet: success or error, then idle
+    broadcastPetStatus(code === 0 ? "success" : "error");
+    setTimeout(() => broadcastPetStatus("idle"), 4000);
 
     broadcast({
       type: "task_done",
       code,
       duration,
-      summary: shorten(resultText, 300),
+      summary: resultText,
+      phase: wasPlan ? "plan" : activeTask.isExecute ? "execute" : "normal",
     });
 
     activeTask = null;
+    cleanupTempFiles();
 
-    // Process next in queue
-    if (taskQueue.length > 0) {
+    // Don't auto-dequeue after plan — wait for user to execute/discard
+    if (!wasPlan && taskQueue.length > 0) {
       const next = taskQueue.shift();
       broadcast({ type: "queue_update", remaining: taskQueue.length });
-      runClaudeTask(next.prompt);
+      runClaudeTask(next.prompt, next.planMode ? { isPlan: true } : {});
     }
   });
 
@@ -361,13 +476,83 @@ function cancelTask() {
     broadcast({ type: "task_cancelled" });
     console.log("[relay] Task cancelled");
     activeTask = null;
+    cleanupTempFiles();
   }
+}
+
+function cleanupTempFiles() {
+  for (const tempPath of taskTempFiles) {
+    try {
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+        console.log(`[relay] Cleaned up: ${path.basename(tempPath)}`);
+      }
+    } catch (e) {
+      console.error(`[relay] Failed to cleanup ${tempPath}: ${e.message}`);
+    }
+  }
+  taskTempFiles = [];
+}
+
+// Clean orphaned temp files from previous sessions on startup
+try {
+  for (const f of fs.readdirSync(PROJECT_DIR)) {
+    if (f.startsWith(TEMP_PREFIX)) {
+      try { fs.unlinkSync(path.join(PROJECT_DIR, f)); console.log(`[relay] Cleaned orphaned: ${f}`); } catch {}
+    }
+  }
+} catch {}
+
+// ── Pet status inference from tool events ────────────────────────────────────
+// Mirrors the mapping in hook.js so the pet animates during relay tasks
+
+function inferPetStatus(toolName, input) {
+  if (!toolName) return "thinking";
+  const tool = toolName;
+
+  if (tool === "Bash") {
+    const cmd = (input.command || "").toLowerCase();
+    const desc = (input.description || "").toLowerCase();
+    const text = cmd + " " + desc;
+    if (/npm install|yarn add|pip install|apt install|brew install|cargo add|pnpm add|bun add/.test(text)) return "installing";
+    if (/npm test|pytest|jest|vitest|mocha|cargo test|go test|unittest|run test/.test(text)) return "testing";
+    if (/deploy|publish|push|release|ship/.test(text)) return "deploying";
+    if (/download|curl|wget|fetch|clone/.test(text)) return "downloading";
+    if (/\brm |del |remove|clean|uninstall|prune/.test(text)) return "deleting";
+    if (/debug|inspect/.test(text)) return "debugging";
+    if (/build|compile|make|bundle|cook/.test(text)) return "cooking";
+    return "coding";
+  }
+  if (tool === "Grep" || tool === "WebSearch" || tool === "Glob") return "searching";
+  if (tool === "Read" || tool === "WebFetch") return "reading";
+  if (tool === "Write" || tool === "Edit" || tool === "NotebookEdit") return "coding";
+  if (tool === "Task") return "thinking";
+  return "thinking";
+}
+
+let lastBroadcastStatus = "idle";
+function broadcastPetStatus(status, context) {
+  if (status === lastBroadcastStatus) return; // avoid spamming duplicates
+  lastBroadcastStatus = status;
+  broadcast({ type: "pet_status", status, context: context || {} });
 }
 
 // ── Broadcast to all connected clients ─────────────────────────────────────
 
 function broadcast(msg) {
   const data = JSON.stringify(msg);
+
+  // Buffer output during active task for reconnecting clients
+  if (msg.type === "task_start") {
+    taskOutputBuffer = [];
+  } else if (activeTask && ["stream", "output", "tool_event"].includes(msg.type)) {
+    taskOutputBuffer.push(data);
+    if (taskOutputBuffer.length > 150) taskOutputBuffer.shift();
+  } else if (msg.type === "task_done") {
+    lastTaskResult = { ...msg, _ts: Date.now() };
+    taskOutputBuffer = [];
+  }
+
   for (const ws of clients) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(data);

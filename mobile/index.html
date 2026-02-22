@@ -44,16 +44,14 @@
   }
   .container.expanded .top-bar { display: flex; }
 
-  /* ── Keyboard mode: hide pet to maximize chat space ── */
-  .container.keyboard-mode .pet-area { display: none; }
-  .container.keyboard-mode .expanded-status { display: none; }
-  .container.keyboard-mode .top-bar { padding-top: 4px; }
+  /* ── Keyboard mode: shrink container so input clears the keyboard ── */
+  .container.keyboard-mode { height: 440px; }
   .top-bar .right-group {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .top-bar .close-btn {
+  .top-bar .close-btn, .top-bar .new-chat-btn {
     background: none;
     border: none;
     color: #8b949e;
@@ -63,6 +61,8 @@
     line-height: 1;
   }
   .top-bar .close-btn:active { color: #e94560; }
+  .top-bar .new-chat-btn { font-size: 15px; }
+  .top-bar .new-chat-btn:active { color: #58a6ff; }
 
   /* ── Pet area ── */
   .pet-area {
@@ -278,14 +278,15 @@
 
   .input-row {
     display: flex;
-    gap: 6px;
+    gap: 4px;
   }
   .input-row input {
     flex: 1;
+    min-width: 0;
     background: #0d1117;
     border: 1.5px solid #30363d;
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 8px 8px;
     color: #e6edf3;
     font-size: 13px;
     outline: none;
@@ -299,15 +300,92 @@
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 8px 14px;
+    padding: 8px 10px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .btn:active { opacity: 0.8; }
   .btn.cancel { background: #30363d; }
   .btn:disabled { opacity: 0.4; }
+
+  /* ── Attach button ── */
+  .attach-btn {
+    background: #21213a;
+    border: 1.5px solid #30363d;
+    border-radius: 8px;
+    color: #8b949e;
+    font-size: 16px;
+    padding: 6px 7px;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .attach-btn:active { border-color: #e94560; color: #e94560; }
+  .attach-btn.has-file { border-color: #4ade80; color: #4ade80; }
+
+  .attachment-preview {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+  }
+  .attachment-preview.visible { display: flex; }
+  .attachment-preview .thumb {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #30363d;
+  }
+  .attachment-preview .file-name {
+    font-size: 11px;
+    color: #8b949e;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attachment-preview .remove-btn {
+    background: none;
+    border: none;
+    color: #f85149;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .attachment-preview .file-size {
+    font-size: 10px;
+    color: #484f58;
+    flex-shrink: 0;
+  }
+
+  .plan-toggle {
+    background: #21213a;
+    color: #8b949e;
+    border: 1.5px solid #30363d;
+    padding: 6px 7px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .plan-toggle.active {
+    background: #1a3a5c;
+    color: #58a6ff;
+    border-color: #58a6ff;
+  }
+  .plan-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .plan-actions .btn.execute { background: #238636; flex: 1; }
+  .plan-actions .btn.execute:active { background: #2ea043; }
+  .plan-actions .btn.edit-plan { background: #1a3a5c; color: #58a6ff; border: 1.5px solid #58a6ff; }
 
   .status-badge {
     font-size: 10px;
@@ -450,6 +528,7 @@
     <button class="char-btn" id="charBtn"><span class="char-icon">&#x1F3AD;</span> <span id="charBtnLabel">Character</span></button>
     <div class="right-group">
       <div class="status-dot top-bar-dot" id="statusDotExpanded"></div>
+      <button class="new-chat-btn" id="newChatBtn" title="New Chat">&#x2795;</button>
       <button class="close-btn" id="collapseBtn">&times;</button>
     </div>
   </div>
@@ -470,10 +549,24 @@
 
   <div class="panel">
     <div class="output-area" id="output"></div>
-    <div class="input-row">
+    <div class="attachment-preview" id="attachPreview">
+      <img class="thumb" id="attachThumb" src="" alt="">
+      <span class="file-name" id="attachName"></span>
+      <span class="file-size" id="attachSize"></span>
+      <button class="remove-btn" id="removeAttach">&times;</button>
+    </div>
+    <div class="input-row" id="inputRow">
+      <button class="attach-btn" id="attachBtn" title="Attach image">&#x1F4CE;</button>
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
       <input type="text" id="promptInput" placeholder="Ask Claude..." autocomplete="off" />
+      <button class="btn plan-toggle" id="planToggle">Plan</button>
       <button class="btn" id="sendBtn">Send</button>
       <button class="btn cancel" id="cancelBtn" style="display:none">Stop</button>
+    </div>
+    <div class="plan-actions" id="planActions" style="display:none">
+      <button class="btn execute" id="executeBtn" style="flex:1">Approve</button>
+      <button class="btn edit-plan" id="editPlanBtn">Edit</button>
+      <button class="btn cancel" id="discardBtn">Cancel</button>
     </div>
   </div>
 
@@ -532,10 +625,22 @@ const charBtnLabel = document.getElementById("charBtnLabel");
 const charPicker = document.getElementById("charPicker");
 const charList = document.getElementById("charList");
 const charPickerClose = document.getElementById("charPickerClose");
+const attachBtn = document.getElementById("attachBtn");
+const fileInput = document.getElementById("fileInput");
+const attachPreview = document.getElementById("attachPreview");
+const attachThumb = document.getElementById("attachThumb");
+const attachName = document.getElementById("attachName");
+const attachSize = document.getElementById("attachSize");
+const removeAttach = document.getElementById("removeAttach");
+
+let pendingAttachment = null;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 let isExpanded = false;
 let currentStatus = "idle";
 let isRunning = false;
+let planModeEnabled = false;
+let editingPlan = false; // true when user tapped Edit and is typing feedback
 
 function setDotClass(cls) {
   statusDot.className = cls;
@@ -1106,7 +1211,9 @@ class RelayClient {
       case "task_start":
         isRunning = true;
         updateButtons();
-        appendOutput(`\u25B6 Running: ${msg.prompt}`, "system-msg");
+        if (msg.phase === "plan") appendOutput(`Planning: ${msg.prompt}`, "system-msg");
+        else if (msg.phase === "execute") appendOutput("Executing plan...", "system-msg");
+        else appendOutput(`\u25B6 Running: ${msg.prompt}`, "system-msg");
         break;
 
       case "stream":
@@ -1125,12 +1232,21 @@ class RelayClient {
         }
         break;
 
-      case "task_done":
+      case "task_done": {
         isRunning = false;
-        updateButtons();
         const dur = msg.duration ? ` (${Math.round(msg.duration / 1000)}s)` : "";
-        appendOutput(`\u2705 Done${dur}`, "system-msg");
+        if (msg.phase === "plan") {
+          appendOutput("Plan ready \u2014 review above, then execute or discard" + dur, "system-msg");
+          updateButtons("plan_ready");
+        } else if (msg.phase === "execute") {
+          appendOutput("Plan executed!" + dur, "system-msg");
+          updateButtons();
+        } else {
+          appendOutput(`\u2705 Done${dur}`, "system-msg");
+          updateButtons();
+        }
         break;
+      }
 
       case "task_cancelled":
         isRunning = false;
@@ -1148,6 +1264,10 @@ class RelayClient {
 
       case "log":
         appendOutput(msg.text, "system-msg");
+        break;
+
+      case "info":
+        appendOutput(msg.message, "system-msg");
         break;
 
       case "pong":
@@ -1203,6 +1323,103 @@ function appendOutput(text, cls) {
 
 let idleRevertTimer = null;
 
+// ── Variant system (mirrors desktop pet.html) ──
+const IDLE_VARIANTS = [
+  "idle", "idle-2", "idle-3", "idle-4", "idle-5", "idle-6", "idle-7", "idle-8",
+  "idle-vibing", "idle-sleepy", "idle-coffee", "idle-coffee-2", "idle-stargazing",
+];
+const RARE_IDLE_VARIANTS = [
+  { key: "idle-stretching", chance: 0.08 },
+  { key: "idle-dancing",    chance: 0.08 },
+  { key: "idle-butterfly",  chance: 0.05 },
+  { key: "idle-juggling",   chance: 0.05 },
+  { key: "idle-rainbow",    chance: 0.02 },
+  { key: "idle-meditation", chance: 0.02 },
+];
+const ACTIVITY_RARE_VARIANTS = {
+  coding:    [{ key: "coding-flow", chance: 0.12 }, { key: "coding-hacking", chance: 0.04 }],
+  thinking:  [{ key: "thinking-eureka", chance: 0.12 }, { key: "thinking-galaxy", chance: 0.04 }],
+  debugging: [{ key: "debugging-detective", chance: 0.12 }, { key: "debugging-rage", chance: 0.04 }],
+  searching: [{ key: "searching-treasure", chance: 0.12 }, { key: "searching-deep", chance: 0.04 }],
+  reading:   [{ key: "reading-scholar", chance: 0.12 }, { key: "reading-ancient", chance: 0.04 }],
+  testing:   [{ key: "testing-scientist", chance: 0.12 }, { key: "testing-perfectionist", chance: 0.04 }],
+  deploying: [{ key: "deploying-warp", chance: 0.12 }, { key: "deploying-satellite", chance: 0.04 }],
+};
+const THINKING_THEMES = [
+  "thinking-cooking", "thinking-action", "thinking-creating",
+  "thinking-processing", "thinking-growing", "thinking-magical",
+  "thinking-silly", "thinking-exploring",
+];
+
+let currentBaseState = null;
+let currentActivityVariant = null;
+let idleCycleTimer = null;
+let idleCycleIndex = 0;
+
+function hasState(key) {
+  return sprite && sprite.config && sprite.config.states && sprite.config.states[key] && sprite.images[key];
+}
+
+function startIdleCycle() {
+  stopIdleCycle();
+  idleCycleIndex = Math.floor(Math.random() * IDLE_VARIANTS.length);
+  applyIdleVariant();
+  idleCycleTimer = setInterval(() => {
+    idleCycleIndex = (idleCycleIndex + 1) % IDLE_VARIANTS.length;
+    applyIdleVariant();
+  }, 12000);
+}
+
+function stopIdleCycle() {
+  if (idleCycleTimer) { clearInterval(idleCycleTimer); idleCycleTimer = null; }
+}
+
+function applyIdleVariant() {
+  // Roll for rare idle variant
+  const roll = Math.random();
+  let cumulative = 0;
+  for (const rv of RARE_IDLE_VARIANTS) {
+    cumulative += rv.chance;
+    if (roll < cumulative && hasState(rv.key)) {
+      sprite.setState(rv.key);
+      return;
+    }
+  }
+  // Normal cycle
+  const variant = IDLE_VARIANTS[idleCycleIndex];
+  if (hasState(variant)) sprite.setState(variant);
+  else sprite.setState("idle");
+}
+
+function rollActivityVariant(baseState) {
+  // Don't re-roll if same base state persists
+  if (baseState === currentBaseState && currentActivityVariant) return currentActivityVariant;
+  currentBaseState = baseState;
+  currentActivityVariant = null;
+
+  const variants = ACTIVITY_RARE_VARIANTS[baseState];
+  if (variants) {
+    const roll = Math.random();
+    let cumulative = 0;
+    for (const rv of variants) {
+      cumulative += rv.chance;
+      if (roll < cumulative && hasState(rv.key)) {
+        currentActivityVariant = rv.key;
+        return rv.key;
+      }
+    }
+  }
+  // For thinking: pick a random theme if no rare hit
+  if (baseState === "thinking") {
+    const theme = THINKING_THEMES[Math.floor(Math.random() * THINKING_THEMES.length)];
+    if (hasState(theme)) {
+      currentActivityVariant = theme;
+      return theme;
+    }
+  }
+  return baseState;
+}
+
 function handlePetStatus(status, context) {
   if (!status) return;
   const prevStatus = currentStatus;
@@ -1216,7 +1433,16 @@ function handlePetStatus(status, context) {
   statusBadge.style.background = badgeColors[status] || "#8b949e";
 
   if (sprite && sprite.config) {
-    sprite.setState(status);
+    if (status === "idle") {
+      stopIdleCycle();
+      startIdleCycle();
+    } else {
+      stopIdleCycle();
+      currentBaseState = null;
+      currentActivityVariant = null;
+      const variant = rollActivityVariant(status);
+      sprite.setState(variant);
+    }
   }
 
   // Auto-revert transient states to idle (in case desktop app isn't running)
@@ -1266,15 +1492,31 @@ collapseBtn.addEventListener("click", (e) => {
   setExpanded(false);
 });
 
+// New Chat — clear session so next prompt starts fresh
+const newChatBtn = document.getElementById("newChatBtn");
+newChatBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  relay.send({ type: "new_conversation" });
+  output.innerHTML = "";
+  streamEl = null;
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Prompt sending
 // ══════════════════════════════════════════════════════════════════════════════
 
-function updateButtons() {
-  if (isRunning) {
+function updateButtons(phase) {
+  if (phase === "plan_ready") {
+    inputRow.style.display = "none";
+    planActions.style.display = "flex";
+  } else if (isRunning) {
+    inputRow.style.display = "flex";
+    planActions.style.display = "none";
     sendBtn.style.display = "none";
     cancelBtn.style.display = "";
   } else {
+    inputRow.style.display = "flex";
+    planActions.style.display = "none";
     sendBtn.style.display = "";
     cancelBtn.style.display = "none";
   }
@@ -1282,9 +1524,78 @@ function updateButtons() {
 
 function sendPrompt() {
   const text = promptInput.value.trim();
-  if (!text) return;
-  relay.send({ type: "prompt", prompt: text });
+  if (!text && !pendingAttachment) return;
+  const msg = { type: "prompt", prompt: text || "(see attached image)" };
+  if (editingPlan) {
+    msg.planMode = true;
+    editingPlan = false;
+    promptInput.placeholder = "Ask Claude...";
+  } else {
+    msg.planMode = planModeEnabled;
+  }
+  if (pendingAttachment) {
+    msg.attachments = [{
+      name: pendingAttachment.name,
+      mimeType: pendingAttachment.mimeType,
+      data: pendingAttachment.data,
+    }];
+    clearAttachment();
+  }
+  relay.send(msg);
   promptInput.value = "";
+}
+
+// ── Attachment handling ──
+attachBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const validTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  if (!validTypes.includes(file.type)) {
+    appendOutput("Unsupported file type. Use PNG, JPEG, GIF, or WebP.", "error-msg");
+    fileInput.value = "";
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    appendOutput("File too large (max 10MB).", "error-msg");
+    fileInput.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    pendingAttachment = {
+      name: file.name,
+      mimeType: file.type,
+      data: dataUrl.split(",")[1],
+      size: file.size,
+    };
+    attachThumb.src = dataUrl;
+    attachName.textContent = file.name;
+    attachSize.textContent = formatSize(file.size);
+    attachPreview.classList.add("visible");
+    attachBtn.classList.add("has-file");
+  };
+  reader.readAsDataURL(file);
+  fileInput.value = "";
+});
+
+removeAttach.addEventListener("click", clearAttachment);
+
+function clearAttachment() {
+  pendingAttachment = null;
+  attachPreview.classList.remove("visible");
+  attachBtn.classList.remove("has-file");
+  attachThumb.src = "";
+  attachName.textContent = "";
+  attachSize.textContent = "";
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 sendBtn.addEventListener("click", sendPrompt);
@@ -1297,11 +1608,13 @@ cancelBtn.addEventListener("click", () => {
 
 // Tell Android to move overlay up when keyboard appears
 promptInput.addEventListener("focus", () => {
+  container.classList.add("keyboard-mode");
   if (window.AndroidBridge && window.AndroidBridge.setKeyboardVisible) {
     try { window.AndroidBridge.setKeyboardVisible(true); } catch {}
   }
 });
 promptInput.addEventListener("blur", () => {
+  container.classList.remove("keyboard-mode");
   if (window.AndroidBridge && window.AndroidBridge.setKeyboardVisible) {
     try { window.AndroidBridge.setKeyboardVisible(false); } catch {}
   }
@@ -1445,6 +1758,45 @@ charBtn.addEventListener("click", (e) => {
 charPickerClose.addEventListener("click", (e) => {
   e.stopPropagation();
   closeCharPicker();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Plan Mode
+// ══════════════════════════════════════════════════════════════════════════════
+
+const planToggle = document.getElementById("planToggle");
+const planActions = document.getElementById("planActions");
+const executeBtn = document.getElementById("executeBtn");
+const editPlanBtn = document.getElementById("editPlanBtn");
+const discardBtn = document.getElementById("discardBtn");
+const inputRow = document.getElementById("inputRow");
+
+planToggle.addEventListener("click", () => {
+  planModeEnabled = !planModeEnabled;
+  planToggle.classList.toggle("active", planModeEnabled);
+});
+
+// Approve — execute the plan as-is
+executeBtn.addEventListener("click", () => {
+  relay.send({ type: "execute_plan" });
+});
+
+// Edit — show input row so user can type feedback, then re-plan
+editPlanBtn.addEventListener("click", () => {
+  planActions.style.display = "none";
+  inputRow.style.display = "flex";
+  promptInput.placeholder = "Describe changes to the plan...";
+  promptInput.focus();
+  editingPlan = true;
+});
+
+// Cancel — discard the plan
+discardBtn.addEventListener("click", () => {
+  planActions.style.display = "none";
+  inputRow.style.display = "flex";
+  promptInput.placeholder = "Ask Claude...";
+  editingPlan = false;
+  appendOutput("Plan cancelled", "system-msg");
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

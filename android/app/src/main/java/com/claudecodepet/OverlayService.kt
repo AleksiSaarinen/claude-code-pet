@@ -18,6 +18,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.inputmethod.InputMethodManager
 
 class OverlayService : Service() {
 
@@ -31,6 +32,7 @@ class OverlayService : Service() {
     private lateinit var webView: WebView
     private lateinit var params: WindowManager.LayoutParams
     private lateinit var prefs: PetPreferences
+    private var scrimView: View? = null
 
     // Collapsed / expanded sizes in dp → px
     private var collapsedW = 150
@@ -46,6 +48,14 @@ class OverlayService : Service() {
     private var initialTouchY = 0f
     private var isDragging = false
     private val dragThreshold = 10
+
+    // Keyboard-aware positioning
+    private var preKeyboardY = 0
+    private var isKeyboardMode = false
+
+    // Save collapsed position so we can restore on collapse
+    private var collapsedX = 0
+    private var collapsedY = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -113,40 +123,51 @@ class OverlayService : Service() {
         params.x = prefs.overlayX
         params.y = prefs.overlayY
 
-        // Drag handling on the webview
+        // Collapsed: intercept ALL touches (drag to move, tap to expand)
+        // Expanded: pass touches to WebView (scroll, type); touches outside pass through naturally
         webView.setOnTouchListener { _, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    isDragging = false
-                    false // let WebView handle if not dragging
+                    if (isExpanded) {
+                        false
+                    } else {
+                        initialX = params.x
+                        initialY = params.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        isDragging = false
+                        true // intercept in collapsed mode
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - initialTouchX).toInt()
-                    val dy = (event.rawY - initialTouchY).toInt()
-                    if (!isDragging && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold)) {
-                        isDragging = true
-                    }
-                    if (isDragging) {
-                        params.x = initialX + dx
-                        params.y = initialY + dy
-                        windowManager.updateViewLayout(webView, params)
-                        true
-                    } else {
+                    if (isExpanded) {
                         false
+                    } else {
+                        val dx = (event.rawX - initialTouchX).toInt()
+                        val dy = (event.rawY - initialTouchY).toInt()
+                        if (!isDragging && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold)) {
+                            isDragging = true
+                        }
+                        if (isDragging) {
+                            params.x = initialX + dx
+                            params.y = initialY + dy
+                            windowManager.updateViewLayout(webView, params)
+                        }
+                        true
                     }
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (isDragging) {
-                        // Save position
+                    if (isExpanded) {
+                        false
+                    } else if (isDragging) {
                         prefs.overlayX = params.x
                         prefs.overlayY = params.y
                         true
                     } else {
-                        false // let WebView handle tap
+                        // Tap (no drag) → expand
+                        webView.evaluateJavascript("setExpanded(true)", null)
+                        setExpandedMode(true)
+                        true
                     }
                 }
                 else -> false
@@ -156,26 +177,76 @@ class OverlayService : Service() {
         windowManager.addView(webView, params)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
+    private fun showScrim() {
+        if (scrimView != null) return
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+
+        val scrim = View(this)
+        scrim.setBackgroundColor(0x44000000) // dim background
+        scrim.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                // Tap on scrim → collapse
+                webView.evaluateJavascript("setExpanded(false)", null)
+                setExpandedMode(false)
+                true
+            } else true
+        }
+
+        val scrimParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        )
+        windowManager.addView(scrim, scrimParams)
+        // Re-add webView on top so it's above the scrim
+        windowManager.removeView(webView)
+        windowManager.addView(webView, params)
+        scrimView = scrim
+    }
+
+    private fun hideScrim() {
+        scrimView?.let {
+            try { windowManager.removeView(it) } catch (_: Exception) {}
+        }
+        scrimView = null
+    }
+
     private fun setExpandedMode(expanded: Boolean) {
         isExpanded = expanded
+        val display = windowManager.defaultDisplay
+        val screenW = display.width
+        val screenH = display.height
         if (expanded) {
+            // Save collapsed position to restore later
+            collapsedX = params.x
+            collapsedY = params.y
             params.width = expandedW
             params.height = expandedH
-            // Remove NOT_FOCUSABLE so user can type, keep layout flags
-            params.flags = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            // Center horizontally, position near top (~8% from top)
+            params.x = (screenW - expandedW) / 2
+            params.y = (screenH * 0.08).toInt()
+            // Show scrim behind overlay so tap-outside-to-close works
+            showScrim()
         } else {
+            // Hide scrim first
+            hideScrim()
             params.width = collapsedW
             params.height = collapsedH
-            // Re-add NOT_FOCUSABLE so touches pass through
             params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            // Restore collapsed position
+            params.x = collapsedX
+            params.y = collapsedY
         }
         windowManager.updateViewLayout(webView, params)
-        if (expanded) {
-            webView.requestFocus()
-        }
     }
 
     private fun createNotificationChannel() {
@@ -223,17 +294,62 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        hideScrim()
         try {
             windowManager.removeView(webView)
         } catch (_: Exception) {}
         webView.destroy()
     }
 
-    // JS bridge — the web page calls this to resize the overlay
+    private fun setKeyboardMode(visible: Boolean) {
+        if (visible == isKeyboardMode) return
+        isKeyboardMode = visible
+        if (visible) {
+            // Remove NOT_FOCUSABLE so keyboard can open, move overlay to top
+            preKeyboardY = params.y
+            params.y = 0
+            params.flags = 0 // no flags = focusable
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        } else {
+            // Restore NOT_FOCUSABLE and position
+            params.y = preKeyboardY
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            if (!isExpanded) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            }
+        }
+        windowManager.updateViewLayout(webView, params)
+        if (visible) {
+            webView.requestFocus()
+            // Force keyboard open after removing FLAG_NOT_FOCUSABLE
+            webView.postDelayed({
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
+            }, 100)
+        }
+    }
+
+    // JS bridge — the web page calls this to resize the overlay and save character
     inner class PetBridge {
         @JavascriptInterface
         fun setExpanded(expanded: Boolean) {
             webView.post { setExpandedMode(expanded) }
+        }
+
+        @JavascriptInterface
+        fun setCharacter(charId: String) {
+            prefs.character = charId
+        }
+
+        @JavascriptInterface
+        fun getCharacter(): String {
+            return prefs.character
+        }
+
+        @JavascriptInterface
+        fun setKeyboardVisible(visible: Boolean) {
+            webView.post { setKeyboardMode(visible) }
         }
     }
 }

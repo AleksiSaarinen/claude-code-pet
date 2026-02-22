@@ -137,6 +137,17 @@ const wss = new WebSocketServer({ server });
 const clients = new Set();
 let activeTask = null; // only one Claude task at a time
 let taskQueue = [];
+let lastSessionId = null; // track conversation session for --resume
+
+// Persist session ID to survive relay restarts
+const SESSION_FILE = path.join(path.dirname(STATUS_FILE), "relay-session-id.txt");
+function loadSessionId() {
+  try { return fs.readFileSync(SESSION_FILE, "utf8").trim() || null; } catch { return null; }
+}
+function saveSessionId(id) {
+  try { fs.writeFileSync(SESSION_FILE, id, "utf8"); } catch {}
+}
+lastSessionId = loadSessionId();
 
 wss.on("connection", (ws, req) => {
   // ── Auth: first message must be { type: "auth", token: "..." } ──
@@ -175,6 +186,13 @@ wss.on("connection", (ws, req) => {
 
       case "cancel":
         cancelTask();
+        break;
+
+      case "new_conversation":
+        lastSessionId = null;
+        try { fs.unlinkSync(SESSION_FILE); } catch {}
+        console.log("[relay] Starting fresh conversation");
+        broadcast({ type: "info", message: "New conversation started" });
         break;
 
       case "status":
@@ -225,11 +243,17 @@ function runClaudeTask(prompt) {
   // Use process.platform check — Windows needs shell:false to avoid cmd.exe mangling
   // multi-word prompts; Unix works either way
   const claudeCmd = process.platform === "win32" ? "claude.exe" : "claude";
-  const claude = spawn(claudeCmd, [
+  const args = [
     "-p", prompt,
     "--output-format", "stream-json",
     "--verbose",
-  ], {
+    "--dangerously-skip-permissions",
+  ];
+  if (lastSessionId) {
+    args.push("--resume", lastSessionId);
+    console.log(`[relay] Resuming session ${lastSessionId.slice(0, 8)}...`);
+  }
+  const claude = spawn(claudeCmd, args, {
     cwd: PROJECT_DIR,
     stdio: ["ignore", "pipe", "pipe"],
     env: (() => { const e = { ...process.env }; delete e.CLAUDECODE; return e; })(),
@@ -245,6 +269,13 @@ function runClaudeTask(prompt) {
       try {
         const event = JSON.parse(line);
         fullOutput += line + "\n";
+
+        // Capture session ID for --resume on future prompts
+        if (event.type === "system" && event.session_id) {
+          lastSessionId = event.session_id;
+          saveSessionId(lastSessionId);
+          console.log(`[relay] Session ID: ${lastSessionId.slice(0, 8)}...`);
+        }
 
         // Forward interesting events to the phone
         if (event.type === "assistant" && event.message) {
@@ -293,6 +324,7 @@ function runClaudeTask(prompt) {
   });
 
   claude.on("close", (code) => {
+    if (!activeTask) return; // already cancelled
     const duration = Date.now() - activeTask.startTime;
     console.log(`[relay] Task completed (code ${code}, ${Math.round(duration / 1000)}s)`);
 

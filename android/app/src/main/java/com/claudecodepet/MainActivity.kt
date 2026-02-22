@@ -113,6 +113,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
+        OverlayService.isRunning = true
         Toast.makeText(this, "Pet overlay started", Toast.LENGTH_SHORT).show()
         updateUI()
     }
@@ -120,6 +121,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopOverlayService() {
         val intent = Intent(this, OverlayService::class.java)
         stopService(intent)
+        OverlayService.isRunning = false
         Toast.makeText(this, "Pet overlay stopped", Toast.LENGTH_SHORT).show()
         updateUI()
     }

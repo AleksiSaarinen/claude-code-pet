@@ -134,11 +134,11 @@ RELAY_TOKEN="secret" RELAY_PROJECT_DIR="/path/to/project" node relay-server.js
 - `GET /characters/<name>/<file>` → character assets (PNGs, JSON) with MIME types
 - Path traversal protection (rejects `..` and validates resolved paths)
 
-### IMPORTANT — `claude -p` concurrency limitation:
-- The relay spawns `claude -p` to handle prompts. **Only one Claude Code instance can run on a machine at a time.**
-- If you have an interactive Claude Code session open in a terminal, `claude -p` from the relay will hang silently.
-- **Always run the relay standalone** — close any Claude Code sessions first, then start the relay in a plain terminal.
-- The relay strips the `CLAUDECODE` env var from spawned processes to avoid the nested-session check, but shared session locks still prevent concurrent usage.
+### Gotchas — `claude -p` spawning:
+- The relay spawns `claude -p` with `stdio: ["ignore", "pipe", "pipe"]` — **stdin must be closed** or the process hangs on Windows.
+- The relay strips the `CLAUDECODE` env var from spawned processes to avoid the nested-session error when launched from inside a Claude Code session.
+- `claude -p` can run alongside interactive Claude Code sessions — concurrency is fine.
+- **Always run the relay in a separate terminal** (not spawned from within Claude Code's Bash tool, which inherits session state).
 
 ## Mobile Pet Page
 `mobile/index.html` — self-contained HTML page served by the relay, renders the pet in a phone browser or Android WebView overlay.

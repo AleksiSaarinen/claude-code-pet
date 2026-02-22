@@ -222,13 +222,15 @@ function runClaudeTask(prompt) {
   console.log(`[relay] Running: "${shorten(prompt, 60)}"`);
 
   // Spawn claude -p with stream-json for real-time output
-  const claude = spawn("claude", [
+  // Use process.platform check — Windows needs shell:false to avoid cmd.exe mangling
+  // multi-word prompts; Unix works either way
+  const claudeCmd = process.platform === "win32" ? "claude.exe" : "claude";
+  const claude = spawn(claudeCmd, [
     "-p", prompt,
     "--output-format", "stream-json",
     "--verbose",
   ], {
     cwd: PROJECT_DIR,
-    shell: true,
     stdio: ["ignore", "pipe", "pipe"],
     env: (() => { const e = { ...process.env }; delete e.CLAUDECODE; return e; })(),
   });

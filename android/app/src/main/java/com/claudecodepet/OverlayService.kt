@@ -258,7 +258,7 @@ class OverlayService : Service() {
             collapsedY = params.y
             params.width = expandedW
             params.height = expandedH
-            params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL  // Focusable for text input, but let touches outside pass to scrim
             // Center horizontally, position near top (~8% from top)
             params.x = (screenW - expandedW) / 2
             params.y = (screenH * 0.08).toInt()
@@ -362,7 +362,7 @@ class OverlayService : Service() {
             preKeyboardY = params.y
             params.y = 0
             // Don't change height — just move to top and let web page handle layout
-            params.flags = 0 // no flags = focusable
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL // focusable but let outside touches pass to scrim
             params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         } else {
             // Restore NOT_FOCUSABLE, position, and full expanded height

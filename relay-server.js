@@ -279,10 +279,13 @@ function handlePrompt(msg, ws) {
     }
   }
 
+  // Keep the original user prompt for display (before image/plan prefixes)
+  const userPrompt = msg.prompt || prompt;
+
   if (activeTask) {
     // Queue it
-    taskQueue.push({ prompt, ws, planMode: msg.planMode });
-    broadcast({ type: "queued", position: taskQueue.length, prompt: shorten(msg.prompt || prompt, 60) });
+    taskQueue.push({ prompt, ws, planMode: msg.planMode, displayPrompt: userPrompt });
+    broadcast({ type: "queued", position: taskQueue.length, prompt: userPrompt });
     return;
   }
 
@@ -301,9 +304,9 @@ function handlePrompt(msg, ws) {
         + "Analyze the codebase, identify all files that need to change, and describe "
         + "your approach step by step. Do NOT make any changes yet -- only plan.\n\nTask: " + prompt;
     }
-    runClaudeTask(wrapped, { isPlan: true });
+    runClaudeTask(wrapped, { isPlan: true, displayPrompt: userPrompt });
   } else {
-    runClaudeTask(prompt);
+    runClaudeTask(prompt, { displayPrompt: userPrompt });
   }
 }
 
@@ -323,16 +326,17 @@ function handleExecutePlan(ws) {
 }
 
 function runClaudeTask(prompt, options = {}) {
-  const { isPlan = false, isExecute = false } = options;
+  const { isPlan = false, isExecute = false, displayPrompt } = options;
+  const shown = displayPrompt || prompt;
   activeTask = { prompt, startTime: Date.now(), isPlan, isExecute };
   broadcast({
     type: "task_start",
-    prompt: shorten(prompt, 80),
+    prompt: shown,
     phase: isPlan ? "plan" : isExecute ? "execute" : "normal",
   });
   broadcastPetStatus("thinking");
 
-  console.log(`[relay] Running: "${shorten(prompt, 60)}"`);
+  console.log(`[relay] Running: "${shorten(shown, 60)}"`);
 
   // Spawn claude -p with stream-json for real-time output
   // Use process.platform check — Windows needs shell:false to avoid cmd.exe mangling
@@ -461,7 +465,7 @@ function runClaudeTask(prompt, options = {}) {
     if (!wasPlan && taskQueue.length > 0) {
       const next = taskQueue.shift();
       broadcast({ type: "queue_update", remaining: taskQueue.length });
-      runClaudeTask(next.prompt, next.planMode ? { isPlan: true } : {});
+      runClaudeTask(next.prompt, { isPlan: !!next.planMode, displayPrompt: next.displayPrompt });
     }
   });
 

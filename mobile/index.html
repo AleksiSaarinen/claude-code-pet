@@ -11,8 +11,6 @@
     background: transparent;
     font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
     overflow: hidden;
-    -webkit-user-select: none;
-    user-select: none;
     color: #e0e0e0;
   }
 
@@ -27,6 +25,8 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    -webkit-user-select: none;
+    user-select: none;
   }
   .container.expanded {
     width: 320px;
@@ -270,11 +270,168 @@
     margin-bottom: 8px;
     min-height: 0;
     word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+  .output-area * {
+    -webkit-user-select: text;
+    user-select: text;
   }
   .output-area .system-msg { color: #8b949e; font-style: italic; }
   .output-area .error-msg { color: #f85149; }
   .output-area .stream-text { color: #e6edf3; }
   .output-area .tool-msg { color: #d2a8ff; }
+
+  /* ── Markdown rendered content ── */
+  .md-rendered {
+    font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #e6edf3;
+  }
+
+  /* Headings */
+  .md-heading {
+    color: #e6edf3;
+    font-weight: 700;
+    margin: 10px 0 4px;
+    line-height: 1.3;
+  }
+  .md-heading:first-child { margin-top: 0; }
+  h1.md-heading { font-size: 17px; border-bottom: 1px solid #21262d; padding-bottom: 4px; }
+  h2.md-heading { font-size: 15px; border-bottom: 1px solid #21262d; padding-bottom: 3px; }
+  h3.md-heading { font-size: 14px; }
+  h4.md-heading, h5.md-heading, h6.md-heading { font-size: 13px; }
+
+  /* Fenced code blocks */
+  .md-codeblock {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 6px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #e6edf3;
+    white-space: pre;
+    word-break: normal;
+    word-wrap: normal;
+  }
+  .md-codeblock code {
+    background: none;
+    padding: 0;
+    border: none;
+    font-size: inherit;
+    color: inherit;
+  }
+
+  /* Inline code */
+  .md-inline-code {
+    background: #1b2332;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    color: #f0883e;
+    word-break: break-word;
+  }
+
+  /* Lists */
+  .md-list {
+    margin: 4px 0;
+    padding-left: 20px;
+  }
+  .md-list li {
+    margin: 2px 0;
+    color: #c9d1d9;
+  }
+
+  /* Blockquotes */
+  .md-quote {
+    border-left: 3px solid #3b82f6;
+    padding: 2px 10px;
+    margin: 6px 0;
+    color: #8b949e;
+    background: rgba(56, 139, 253, 0.06);
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Horizontal rule */
+  .md-hr {
+    border: none;
+    border-top: 1px solid #21262d;
+    margin: 8px 0;
+  }
+
+  /* Links */
+  .md-rendered a {
+    color: #58a6ff;
+    text-decoration: none;
+  }
+  .md-rendered a:active {
+    text-decoration: underline;
+  }
+
+  /* Strong, emphasis, strikethrough */
+  .md-rendered strong { color: #e6edf3; font-weight: 700; }
+  .md-rendered em { font-style: italic; }
+  .md-rendered s { color: #8b949e; text-decoration: line-through; }
+
+  /* Allow copy in rendered content */
+  .md-rendered {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Copy buttons */
+  .copy-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #8b949e;
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .copy-btn:active { background: rgba(255, 255, 255, 0.15); }
+  .copy-btn.copied { color: #4ade80; border-color: #4ade80; }
+
+  .response-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+  }
+
+  .md-codeblock-wrap {
+    position: relative;
+    margin: 6px 0;
+  }
+  .md-codeblock-wrap .code-copy-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    color: #8b949e;
+    font-size: 10px;
+    padding: 2px 6px;
+    cursor: pointer;
+    opacity: 0.6;
+    z-index: 2;
+  }
+  .md-codeblock-wrap .code-copy-btn:active { opacity: 1; }
+  .md-codeblock-wrap .code-copy-btn.copied { color: #4ade80; border-color: #4ade80; opacity: 1; }
+  .md-codeblock-wrap .md-codeblock { margin: 0; }
 
   .input-row {
     display: flex;
@@ -291,6 +448,8 @@
     font-size: 13px;
     outline: none;
     font-family: inherit;
+    -webkit-user-select: text;
+    user-select: text;
   }
   .input-row input:focus { border-color: #e94560; }
   .input-row input::placeholder { color: #484f58; }
@@ -1293,24 +1452,217 @@ class RelayClient {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Markdown Rendering (escape-first for XSS safety)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function parseMarkdown(escaped) {
+  // Phase 1: Extract fenced code blocks to protect their content
+  const codeBlocks = [];
+  let text = escaped.replace(/^```(\w*)\n([\s\S]*?)^```\s*$/gm, (m, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang, code });
+    return "\x00CB" + idx + "\x00";
+  });
+
+  // Phase 2: Block-level transforms (line-based)
+  const lines = text.split("\n");
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Check for placeholder (code block) — pass through
+    if (line.match(/^\x00CB\d+\x00$/)) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    // Headings
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const lvl = headingMatch[1].length;
+      out.push(`<h${lvl} class="md-heading">${headingMatch[2]}</h${lvl}>`);
+      i++;
+      continue;
+    }
+
+    // Horizontal rules
+    if (/^(---+|\*\*\*+|___+)\s*$/.test(line)) {
+      out.push('<hr class="md-hr">');
+      i++;
+      continue;
+    }
+
+    // Blockquotes (> is escaped to &gt;)
+    if (/^&gt;\s?/.test(line)) {
+      const quoteLines = [];
+      while (i < lines.length && /^&gt;\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^&gt;\s?/, ""));
+        i++;
+      }
+      out.push('<div class="md-quote">' + quoteLines.join("<br>") + "</div>");
+      continue;
+    }
+
+    // Unordered lists
+    if (/^[\-\*\+]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[\-\*\+]\s+/.test(lines[i])) {
+        items.push("<li>" + lines[i].replace(/^[\-\*\+]\s+/, "") + "</li>");
+        i++;
+      }
+      out.push('<ul class="md-list">' + items.join("") + "</ul>");
+      continue;
+    }
+
+    // Ordered lists
+    if (/^\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+        items.push("<li>" + lines[i].replace(/^\d+\.\s+/, "") + "</li>");
+        i++;
+      }
+      out.push('<ol class="md-list">' + items.join("") + "</ol>");
+      continue;
+    }
+
+    // Regular line
+    out.push(line);
+    i++;
+  }
+
+  text = out.join("\n");
+
+  // Phase 3: Inline transforms
+  text = text.replace(/`([^`]+?)`/g, '<code class="md-inline-code">$1</code>');
+  text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
+  text = text.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
+  text = text.replace(/~~(.+?)~~/g, "<s>$1</s>");
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, url) => {
+    const href = url.replace(/&amp;/g, "&");
+    return '<a href="' + href + '" target="_blank" rel="noopener">' + label + "</a>";
+  });
+
+  // Line breaks: double newline → paragraph break, single → <br>
+  text = text.replace(/\n{2,}/g, "<br><br>");
+  text = text.replace(/\n/g, "<br>");
+
+  // Phase 4: Restore code blocks (wrapped with copy button)
+  text = text.replace(/\x00CB(\d+)\x00/g, (m, idx) => {
+    const block = codeBlocks[parseInt(idx)];
+    const langCls = block.lang ? ' class="language-' + block.lang + '"' : "";
+    const langLabel = block.lang ? block.lang : "";
+    return '<div class="md-codeblock-wrap"><button class="code-copy-btn" onclick="copyCode(this)">' +
+      (langLabel ? langLabel + ' \u00B7 ' : '') + 'Copy</button>' +
+      '<pre class="md-codeblock"><code' + langCls + ">" + block.code + "</code></pre></div>";
+  });
+
+  return text;
+}
+
+function copyToClipboard(text, btn) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => showCopied(btn)).catch(() => fallbackCopy(text, btn));
+  } else {
+    fallbackCopy(text, btn);
+  }
+}
+
+function fallbackCopy(text, btn) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); showCopied(btn); } catch {}
+  document.body.removeChild(ta);
+}
+
+function showCopied(btn) {
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.textContent = "\u2713 Copied";
+  btn.classList.add("copied");
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied"); }, 1500);
+}
+
+function copyCode(btn) {
+  const wrap = btn.closest(".md-codeblock-wrap");
+  const code = wrap ? wrap.querySelector("code") : null;
+  if (code) copyToClipboard(code.textContent, btn);
+}
+
+function copyResponse(btn) {
+  const container = btn.closest(".stream-text");
+  if (container) {
+    // Get text content but skip the copy buttons themselves
+    const clone = container.cloneNode(true);
+    clone.querySelectorAll(".copy-btn, .code-copy-btn").forEach(b => b.remove());
+    copyToClipboard(clone.textContent, btn);
+  }
+}
+
 // ── Streaming text accumulator ──
 let streamEl = null;
+let streamBuffer = "";
+let renderTimer = null;
+const RENDER_DEBOUNCE = 80;
+
+function renderStream() {
+  if (streamEl && streamBuffer) {
+    streamEl.innerHTML = parseMarkdown(escapeHtml(streamBuffer));
+    // Add copy button if not already present
+    if (!streamEl.querySelector(".response-header")) {
+      const hdr = document.createElement("div");
+      hdr.className = "response-header";
+      hdr.innerHTML = '<button class="copy-btn" onclick="copyResponse(this)">\u2398 Copy</button>';
+      streamEl.insertBefore(hdr, streamEl.firstChild);
+    }
+    requestAnimationFrame(() => {
+      output.scrollTop = output.scrollHeight;
+    });
+  }
+}
 
 function appendStream(text) {
+  streamBuffer += text;
   if (!streamEl) {
     streamEl = document.createElement("div");
-    streamEl.className = "stream-text";
+    streamEl.className = "stream-text md-rendered";
     output.appendChild(streamEl);
   }
-  streamEl.textContent += text;
-  output.scrollTop = output.scrollHeight;
+  if (renderTimer) clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderStream, RENDER_DEBOUNCE);
 }
 
 function appendOutput(text, cls) {
-  streamEl = null; // reset stream accumulator
+  // Finalize any in-progress stream
+  if (streamEl && streamBuffer) {
+    if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    renderStream();
+  }
+  streamEl = null;
+  streamBuffer = "";
+  if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+
   const div = document.createElement("div");
   div.className = cls || "";
-  div.textContent = text;
+  if (cls === "stream-text") {
+    div.classList.add("md-rendered");
+    div.innerHTML = '<div class="response-header"><button class="copy-btn" onclick="copyResponse(this)">\u2398 Copy</button></div>' +
+      parseMarkdown(escapeHtml(text));
+  } else {
+    div.textContent = text;
+  }
   output.appendChild(div);
   // Keep output manageable
   while (output.children.length > 200) output.removeChild(output.firstChild);
@@ -1499,6 +1851,8 @@ newChatBtn.addEventListener("click", (e) => {
   relay.send({ type: "new_conversation" });
   output.innerHTML = "";
   streamEl = null;
+  streamBuffer = "";
+  if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

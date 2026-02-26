@@ -436,8 +436,9 @@
   .input-row {
     display: flex;
     gap: 4px;
+    align-items: flex-end;
   }
-  .input-row input {
+  .input-row textarea {
     flex: 1;
     min-width: 0;
     background: #0d1117;
@@ -450,9 +451,15 @@
     font-family: inherit;
     -webkit-user-select: text;
     user-select: text;
+    resize: none;
+    overflow-y: hidden;
+    min-height: 34px;
+    max-height: 120px;
+    line-height: 1.4;
+    box-sizing: border-box;
   }
-  .input-row input:focus { border-color: #e94560; }
-  .input-row input::placeholder { color: #484f58; }
+  .input-row textarea:focus { border-color: #e94560; }
+  .input-row textarea::placeholder { color: #484f58; }
 
   .btn {
     background: #e94560;
@@ -717,7 +724,7 @@
     <div class="input-row" id="inputRow">
       <button class="attach-btn" id="attachBtn" title="Attach image">&#x1F4CE;</button>
       <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
-      <input type="text" id="promptInput" placeholder="Ask Claude..." autocomplete="off" />
+      <textarea id="promptInput" placeholder="Ask Claude..." autocomplete="off" rows="1"></textarea>
       <button class="btn plan-toggle" id="planToggle">Plan</button>
       <button class="btn" id="sendBtn">Send</button>
       <button class="btn cancel" id="cancelBtn" style="display:none">Stop</button>
@@ -1897,6 +1904,7 @@ function sendPrompt() {
   }
   relay.send(msg);
   promptInput.value = "";
+  promptInput.style.height = "auto";
 }
 
 // ── Attachment handling ──
@@ -1976,7 +1984,12 @@ function formatSize(bytes) {
 
 sendBtn.addEventListener("click", sendPrompt);
 promptInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); sendPrompt(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); }
+});
+promptInput.addEventListener("input", () => {
+  promptInput.style.height = "auto";
+  promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + "px";
+  promptInput.style.overflowY = promptInput.scrollHeight > 120 ? "auto" : "hidden";
 });
 cancelBtn.addEventListener("click", () => {
   relay.send({ type: "cancel" });

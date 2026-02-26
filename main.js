@@ -789,7 +789,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
-    skipTaskbar: true,
+    skipTaskbar: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -800,6 +800,13 @@ function createWindow() {
   win.loadFile("pet.html");
   win.setAlwaysOnTop(true, "screen-saver");
   win.setIgnoreMouseEvents(false);
+
+  // Prevent minimize — transparent frameless pet should always be visible.
+  // Clicking the taskbar icon triggers minimize; intercept and just re-show.
+  win.on("minimize", () => {
+    win.restore();
+    win.show();
+  });
 
   // Save position whenever the window is moved (covers native -webkit-app-region drag)
   win.on("moved", () => { saveSettings(); });
@@ -1120,6 +1127,26 @@ if (process.platform === "linux") {
 }
 
 if (process.platform === "darwin" && app.dock) app.dock.hide();
+
+// Prevent second instances from opening the default Electron window
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (win) {
+      win.show();
+      win.focus();
+    }
+  });
+}
+
+app.on("activate", () => {
+  if (win) {
+    win.show();
+    win.focus();
+  }
+});
 
 app.whenReady().then(() => {
   if (IS_HOOK_MODE) return; // Hook runner handles everything above

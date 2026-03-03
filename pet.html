@@ -2465,6 +2465,14 @@
     let unlockedMilestones = new Set();
     let lastProgression = null;
 
+    // Returns tier class for scene — suppressed to tier-0 when tierStrategy is "none"
+    function getSceneTierClass() {
+      if ((spriteMode || videoMode || modelMode) && spriteRenderer && spriteRenderer.config && spriteRenderer.config.tierStrategy === "none") {
+        return "tier-0";
+      }
+      return "tier-" + currentTier;
+    }
+
     // ── SPRITE SHEET / VIDEO / 3D RENDERING ────────────────────────
     const spriteCanvas = document.getElementById("spriteCanvas");
     const videoElement = document.getElementById("videoRenderer");
@@ -5006,7 +5014,7 @@
 
       const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
       const charClass = cssCharMode ? " " + cssCharMode : "";
-      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass + charClass;
+      scene.className = "scene state-" + variant + " " + getSceneTierClass() + modeClass + charClass;
       label.textContent = config.label;
       currentState = variant;
 
@@ -5094,7 +5102,7 @@
 
       const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
       const charClass = cssCharMode ? " " + cssCharMode : "";
-      scene.className = "scene state-" + effectiveState + " tier-" + currentTier + modeClass + charClass;
+      scene.className = "scene state-" + effectiveState + " " + getSceneTierClass() + modeClass + charClass;
       label.textContent = config.label || effectiveState;
       currentState = effectiveState;
 
@@ -5312,9 +5320,13 @@
 
       // Color tier on creature
       if (tier !== currentTier) {
-        scene.classList.remove("tier-" + currentTier);
-        scene.classList.add("tier-" + tier);
+        const oldTierClass = getSceneTierClass();
         currentTier = tier;
+        const newTierClass = getSceneTierClass();
+        if (oldTierClass !== newTierClass) {
+          scene.classList.remove(oldTierClass);
+          scene.classList.add(newTierClass);
+        }
         if ((spriteMode || videoMode || modelMode) && spriteRenderer) {
           spriteRenderer.setTier(tier);
         }
@@ -5456,7 +5468,7 @@
       // Apply the variant visually (same as setState/applyIdleMood internals)
       const modeClass = spriteMode ? " sprite-mode" : videoMode ? " video-mode" : modelMode ? " model-mode" : "";
       const charClass = cssCharMode ? " " + cssCharMode : "";
-      scene.className = "scene state-" + variant + " tier-" + currentTier + modeClass + charClass;
+      scene.className = "scene state-" + variant + " " + getSceneTierClass() + modeClass + charClass;
       label.textContent = config.label || variant;
       currentState = variant;
 

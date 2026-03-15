@@ -9,6 +9,11 @@ const os = require("os");
 // This uses Electron's bundled Node.js so users don't need Node.js installed.
 const IS_HOOK_MODE = process.argv.includes("--run-hook");
 
+// Hide dock icon immediately in hook mode so it doesn't flash in the dock
+if (IS_HOOK_MODE && process.platform === "darwin" && app.dock) {
+  app.dock.hide();
+}
+
 // ── Log file ─────────────────────────────────────────────────────────────────
 const LOG_FILE = path.join(app.getPath("userData"), "debug.log");
 const _origLog = console.log.bind(console);
@@ -912,7 +917,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
-    skipTaskbar: false,
+    skipTaskbar: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -1261,6 +1266,9 @@ function buildTrayMenu(hooksActive) {
 }
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
+
+// Disable GPU process to prevent duplicate dock icon on unsigned macOS apps
+app.disableHardwareAcceleration();
 
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("enable-transparent-visuals");

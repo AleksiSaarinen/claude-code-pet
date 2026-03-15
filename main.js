@@ -793,12 +793,7 @@ function getNodePath() {
 }
 
 function getHookCommand() {
-  if (app.isPackaged) {
-    // In packaged app, use our own exe as the hook runner (no Node.js needed)
-    const exePath = app.getPath("exe").replace(/\\/g, "/");
-    return `"${exePath}" --run-hook`;
-  }
-  // In dev mode, fall back to system Node.js + hook.js (devs have Node.js)
+  // Always use Node.js + hook.js to avoid Electron dock icon flash on macOS
   const hookPath = getHookPath();
   const nodePath = getNodePath();
   return `"${nodePath}" "${hookPath}"`;

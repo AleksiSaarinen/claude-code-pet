@@ -5,13 +5,13 @@
   "frameHeight": 120,
   "defaultFrameDuration": 150,
   "states": {
-    "idle": { "file": "idle.png", "frameCount": 6, "frameDuration": 200, "loop": true },
-    "coding": { "file": "coding.png", "frameCount": 8, "frameDuration": 120, "loop": true },
-    "thinking": { "file": "thinking.png", "frameCount": 6, "frameDuration": 180, "loop": true },
-    "success": { "file": "success.png", "frameCount": 4, "frameDuration": 150, "loop": false },
-    "error": { "file": "error.png", "frameCount": 4, "frameDuration": 150, "loop": false },
-    "searching": { "file": "searching.png", "frameCount": 6, "frameDuration": 160, "loop": true },
-    "reading": { "file": "reading.png", "frameCount": 4, "frameDuration": 200, "loop": true }
+    "idle": { "file": "idle.png", "frameCount": 10, "frameDuration": 180, "loop": true },
+    "coding": { "file": "coding.png", "frameCount": 10, "frameDuration": 100, "loop": true },
+    "thinking": { "file": "thinking.png", "frameCount": 8, "frameDuration": 200, "loop": true },
+    "success": { "file": "success.png", "frameCount": 8, "frameDuration": 120, "loop": false },
+    "error": { "file": "error.png", "frameCount": 8, "frameDuration": 100, "loop": false },
+    "searching": { "file": "searching.png", "frameCount": 8, "frameDuration": 150, "loop": true },
+    "reading": { "file": "reading.png", "frameCount": 8, "frameDuration": 220, "loop": true }
   },
   "fallbackMap": {
     "debugging": "coding",
@@ -64,6 +64,6 @@
     "4": "none",
     "5": "none"
   },
-  "particlesEnabled": true,
-  "accessoriesEnabled": true
+  "particlesEnabled": false,
+  "accessoriesEnabled": false
 }

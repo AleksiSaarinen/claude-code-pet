@@ -1,5 +1,5 @@
 // main.js - Electron main process
-const { app, BrowserWindow, Tray, Menu, screen, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, Tray, Menu, screen, dialog, ipcMain, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -53,6 +53,7 @@ const WINDOW_SIZES = {
 };
 let windowSize = "normal";
 let speechBubblesEnabled = true;
+let floatingPetVisible = true;
 
 // Ensure status file exists
 if (!fs.existsSync(STATUS_FILE)) fs.writeFileSync(STATUS_FILE, "idle");
@@ -594,13 +595,14 @@ function loadSettings() {
         savedWindowPos = data.windowPos;
       }
       if (data.speechBubblesEnabled !== undefined) speechBubblesEnabled = data.speechBubblesEnabled;
+      if (data.floatingPetVisible !== undefined) floatingPetVisible = data.floatingPetVisible;
     }
   } catch (e) { /* use defaults */ }
 }
 
 function saveSettings() {
   try {
-    const obj = { windowSize, speechBubblesEnabled };
+    const obj = { windowSize, speechBubblesEnabled, floatingPetVisible };
     if (win && !win.isDestroyed()) {
       const b = win.getBounds();
       obj.windowPos = { x: b.x, y: b.y };
@@ -628,6 +630,127 @@ function applyCharacter(charInfo) {
       name: charInfo.name,
       path: charPath,
     });
+  }
+  // Also load character for dock icon animation
+  loadDockCharacter(charInfo);
+}
+
+// ── Dock Icon Animation (macOS) ─────────────────────────────────────────────
+
+let dockFrames = {};      // { stateName: [NativeImage, ...] }
+let dockCharConfig = null; // character.json data
+let dockCharPath = null;   // character directory path
+let dockAnimTimer = null;
+let dockCurrentState = "idle";
+let dockCurrentFrame = 0;
+const DOCK_SIZE = 128;     // dock icon size
+
+function extractSpriteFrames(pngPath, frameWidth, frameHeight, frameCount) {
+  try {
+    const pngData = fs.readFileSync(pngPath);
+    const fullImg = nativeImage.createFromBuffer(pngData);
+    const fullSize = fullImg.getSize();
+    const frames = [];
+
+    // We need to crop each frame from the sprite sheet
+    // NativeImage can crop via toBitmap + manual extraction
+    const bitmap = fullImg.toBitmap();
+    const bpp = 4; // bytes per pixel (RGBA)
+
+    for (let i = 0; i < frameCount; i++) {
+      const srcX = i * frameWidth;
+      if (srcX + frameWidth > fullSize.width) break;
+
+      // Extract frame pixels from bitmap row by row
+      const frameBuf = Buffer.alloc(frameWidth * frameHeight * bpp);
+      for (let y = 0; y < frameHeight && y < fullSize.height; y++) {
+        const srcOffset = (y * fullSize.width + srcX) * bpp;
+        const dstOffset = y * frameWidth * bpp;
+        bitmap.copy(frameBuf, dstOffset, srcOffset, srcOffset + frameWidth * bpp);
+      }
+
+      const frameImg = nativeImage.createFromBuffer(frameBuf, {
+        width: frameWidth,
+        height: frameHeight,
+      });
+      // Resize to dock size
+      const resized = frameImg.resize({ width: DOCK_SIZE, height: DOCK_SIZE, quality: 'good' });
+      frames.push(resized);
+    }
+    return frames;
+  } catch (e) {
+    console.log("dock: failed to extract frames from", pngPath, e.message);
+    return [];
+  }
+}
+
+function loadDockCharacter(charInfo) {
+  if (process.platform !== "darwin" || !app.dock) return;
+  if (!charInfo || charInfo.id === "default") {
+    dockFrames = {};
+    dockCharConfig = null;
+    dockCharPath = null;
+    return;
+  }
+
+  try {
+    const configPath = path.join(charInfo.path, "character.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    dockCharConfig = config;
+    dockCharPath = charInfo.path;
+    dockFrames = {};
+
+    const fw = config.frameWidth || 120;
+    const fh = config.frameHeight || 120;
+
+    for (const [stateName, stateInfo] of Object.entries(config.states || {})) {
+      const spritePath = path.join(charInfo.path, stateInfo.file);
+      if (fs.existsSync(spritePath)) {
+        dockFrames[stateName] = extractSpriteFrames(spritePath, fw, fh, stateInfo.frameCount || 1);
+      }
+    }
+
+    console.log("dock: loaded character", charInfo.id, "states:", Object.keys(dockFrames).join(", "));
+    setDockState("idle");
+  } catch (e) {
+    console.log("dock: failed to load character", e.message);
+  }
+}
+
+function resolveState(stateName) {
+  if (dockFrames[stateName] && dockFrames[stateName].length > 0) return stateName;
+  if (dockCharConfig && dockCharConfig.fallbackMap && dockCharConfig.fallbackMap[stateName]) {
+    const fb = dockCharConfig.fallbackMap[stateName];
+    if (dockFrames[fb] && dockFrames[fb].length > 0) return fb;
+  }
+  return "idle";
+}
+
+function setDockState(stateName) {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const resolved = resolveState(stateName);
+  if (resolved === dockCurrentState && dockAnimTimer) return;
+
+  dockCurrentState = resolved;
+  dockCurrentFrame = 0;
+
+  if (dockAnimTimer) {
+    clearInterval(dockAnimTimer);
+    dockAnimTimer = null;
+  }
+
+  const frames = dockFrames[resolved];
+  if (!frames || frames.length === 0) return;
+
+  // Set first frame immediately
+  try { app.dock.setIcon(frames[0]); } catch (e) {}
+
+  if (frames.length > 1) {
+    const duration = (dockCharConfig && dockCharConfig.states[resolved] && dockCharConfig.states[resolved].frameDuration) || 150;
+    dockAnimTimer = setInterval(() => {
+      dockCurrentFrame = (dockCurrentFrame + 1) % frames.length;
+      try { app.dock.setIcon(frames[dockCurrentFrame]); } catch (e) {}
+    }, duration);
   }
 }
 
@@ -821,6 +944,7 @@ function createWindow() {
     win.webContents.executeJavaScript('JSON.stringify({innerW:window.innerWidth,innerH:window.innerHeight,dpr:window.devicePixelRatio})').then(r => console.log('renderer viewport:', r));
     win.webContents.send("set-scale", _sz.w / 200);
     win.webContents.send("speech-toggle", speechBubblesEnabled);
+    if (!floatingPetVisible) win.hide();
     if (selectedCharacterId !== "default") {
       const chars = discoverCharacters();
       const selected = chars.find(c => c.id === selectedCharacterId);
@@ -843,6 +967,7 @@ function createWindow() {
         currentContext = context;
         lastChangeTime = Date.now();
         progression.trackStateChange(status);
+        setDockState(status);
         win.webContents.send("status-change", status, context);
         win.webContents.send("status-update", {
           status: currentStatus,
@@ -867,6 +992,7 @@ function createWindow() {
           currentContext = context;
           lastChangeTime = Date.now();
           progression.trackStateChange(status);
+          setDockState(status);
           win.webContents.send("status-change", status, context);
         }
       }
@@ -1076,6 +1202,20 @@ function buildTrayMenu(hooksActive) {
       },
     },
     {
+      label: "Show Floating Pet",
+      type: "checkbox",
+      checked: floatingPetVisible,
+      click: (item) => {
+        floatingPetVisible = item.checked;
+        if (floatingPetVisible) {
+          win.show();
+        } else {
+          win.hide();
+        }
+        saveSettings();
+      },
+    },
+    {
       label: "Demo Mode",
       type: "checkbox",
       checked: demoActive,
@@ -1126,7 +1266,8 @@ if (process.platform === "linux") {
   app.commandLine.appendSwitch("enable-transparent-visuals");
 }
 
-if (process.platform === "darwin" && app.dock) app.dock.hide();
+// Keep dock visible for animated dock icon
+// if (process.platform === "darwin" && app.dock) app.dock.hide();
 
 // Prevent second instances from opening the default Electron window
 const gotTheLock = app.requestSingleInstanceLock();
@@ -1237,9 +1378,29 @@ app.whenReady().then(() => {
   createWindow();
 
   // System tray
-  tray = new Tray(path.join(__dirname, "icon.png"));
+  const trayIcon = nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 22, height: 22 });
+  tray = new Tray(trayIcon);
   tray.setToolTip("Claude Code Pet");
   tray.setContextMenu(buildTrayMenu(hooksActive));
+
+  // macOS Dock right-click menu
+  if (process.platform === "darwin" && app.dock) {
+    const dockMenu = Menu.buildFromTemplate([
+      {
+        label: "Show/Hide Floating Pet",
+        click: () => {
+          floatingPetVisible = !floatingPetVisible;
+          if (floatingPetVisible) {
+            win.show();
+          } else {
+            win.hide();
+          }
+          saveSettings();
+        },
+      },
+    ]);
+    app.dock.setMenu(dockMenu);
+  }
 
   // Refresh tray menu periodically so stats stay current
   setInterval(() => {

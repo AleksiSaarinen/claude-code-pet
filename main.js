@@ -928,7 +928,7 @@ function createWindow() {
   // Clicking the taskbar icon triggers minimize; intercept and just re-show.
   win.on("minimize", () => {
     win.restore();
-    win.show();
+    if (floatingPetVisible) win.show();
   });
 
   // Save position whenever the window is moved (covers native -webkit-app-region drag)
@@ -1278,7 +1278,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (win) {
+    if (win && floatingPetVisible) {
       win.show();
       win.focus();
     }
@@ -1286,7 +1286,7 @@ if (!gotTheLock) {
 }
 
 app.on("activate", () => {
-  if (win) {
+  if (win && floatingPetVisible) {
     win.show();
     win.focus();
   }

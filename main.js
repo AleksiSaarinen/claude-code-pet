@@ -779,6 +779,19 @@ function getNodePath() {
   // If running in Electron, process.execPath is the Electron binary, not node.
   // Fall back to finding node on PATH via 'where' (Windows) or 'which' (Unix).
   if (nodePath.toLowerCase().includes("electron") || nodePath.toLowerCase().includes("claude-code-pet")) {
+    // On macOS/Linux, check common node locations first (shell PATH may not be
+    // available when Electron launches at login before the user's shell profile)
+    if (process.platform !== "win32") {
+      const commonPaths = [
+        path.join(os.homedir(), ".local/bin/node"),
+        path.join(os.homedir(), ".nvm/current/bin/node"),
+        "/usr/local/bin/node",
+        "/opt/homebrew/bin/node",
+      ];
+      for (const p of commonPaths) {
+        if (fs.existsSync(p)) return p.replace(/\\/g, "/");
+      }
+    }
     try {
       const cmd = process.platform === "win32" ? "where node" : "which node";
       const result = require("child_process").execSync(cmd, { encoding: "utf-8" }).trim();

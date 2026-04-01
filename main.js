@@ -735,6 +735,55 @@ function resolveState(stateName) {
   return "idle";
 }
 
+function getDeployDotColor() {
+  if (cachedWorkflowRuns.length === 0) return null;
+  const latest = cachedWorkflowRuns[0];
+  if (latest.status === "in_progress" || latest.status === "queued" || latest.status === "waiting") return { r: 255, g: 200, b: 0 };
+  if (latest.conclusion === "success") return { r: 50, g: 205, b: 50 };
+  if (latest.conclusion === "failure") return { r: 240, g: 50, b: 50 };
+  if (latest.conclusion === "cancelled") return { r: 150, g: 150, b: 150 };
+  return null;
+}
+
+function addDeployDot(frameImg) {
+  const color = getDeployDotColor();
+  if (!color) return frameImg;
+  const logicalSize = frameImg.getSize();
+  const bitmap = Buffer.from(frameImg.toBitmap());
+  const bpp = 4;
+  // toBitmap() returns actual pixels; getSize() returns logical (DIP) size
+  const pixelWidth = bitmap.length / bpp / logicalSize.height;
+  // If bitmap is larger than logical size, we're on a HiDPI display
+  const scale = pixelWidth / logicalSize.width;
+  const w = Math.round(logicalSize.width * scale);
+  const h = Math.round(logicalSize.height * scale);
+  const dotRadius = Math.round(10 * scale);
+  const borderWidth = Math.round(2 * scale);
+  const cx = w - dotRadius - Math.round(3 * scale);
+  const cy = h - dotRadius - Math.round(3 * scale);
+
+  for (let y = cy - dotRadius - borderWidth; y <= cy + dotRadius + borderWidth; y++) {
+    for (let x = cx - dotRadius - borderWidth; x <= cx + dotRadius + borderWidth; x++) {
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+      if (dist <= dotRadius + borderWidth) {
+        const offset = (y * w + x) * bpp;
+        if (dist > dotRadius) {
+          bitmap[offset] = 20; bitmap[offset + 1] = 20; bitmap[offset + 2] = 20; bitmap[offset + 3] = 255;
+        } else {
+          // toBitmap() returns BGRA on macOS
+          bitmap[offset] = color.b; bitmap[offset + 1] = color.g; bitmap[offset + 2] = color.r; bitmap[offset + 3] = 255;
+        }
+      }
+    }
+  }
+  return nativeImage.createFromBuffer(bitmap, { width: w, height: h, scaleFactor: scale });
+}
+
+function setDockIcon(frame) {
+  try { app.dock.setIcon(addDeployDot(frame)); } catch (e) {}
+}
+
 function setDockState(stateName) {
   if (process.platform !== "darwin" || !app.dock) return;
   const resolved = resolveState(stateName);
@@ -752,13 +801,13 @@ function setDockState(stateName) {
   if (!frames || frames.length === 0) return;
 
   // Set first frame immediately
-  try { app.dock.setIcon(frames[0]); } catch (e) {}
+  setDockIcon(frames[0]);
 
   if (frames.length > 1) {
     const duration = (dockCharConfig && dockCharConfig.states[resolved] && dockCharConfig.states[resolved].frameDuration) || 150;
     dockAnimTimer = setInterval(() => {
       dockCurrentFrame = (dockCurrentFrame + 1) % frames.length;
-      try { app.dock.setIcon(frames[dockCurrentFrame]); } catch (e) {}
+      setDockIcon(frames[dockCurrentFrame]);
     }, duration);
   }
 }
@@ -930,6 +979,7 @@ function createWindow() {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
+    show: false, // prevent flash — show after content loads
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -961,7 +1011,8 @@ function createWindow() {
     win.webContents.executeJavaScript('JSON.stringify({innerW:window.innerWidth,innerH:window.innerHeight,dpr:window.devicePixelRatio})').then(r => console.log('renderer viewport:', r));
     win.webContents.send("set-scale", _sz.w / 200);
     win.webContents.send("speech-toggle", speechBubblesEnabled);
-    if (!floatingPetVisible) win.hide();
+    if (floatingPetVisible) win.show();
+    // win starts hidden (show:false) — only show after content loads
     if (selectedCharacterId !== "default") {
       const chars = discoverCharacters();
       const selected = chars.find(c => c.id === selectedCharacterId);
@@ -1165,13 +1216,20 @@ function buildAchievementsSubmenu() {
 
 let cachedWorkflowRuns = [];
 let deployFetchInProgress = false;
+let deployPollTimer = null;
+const DEPLOY_POLL_FAST = 5000;   // 5s always
+const DEPLOY_POLL_SLOW = 5000;
+
+function hasActiveRun() {
+  return cachedWorkflowRuns.some(r => r.status === "in_progress" || r.status === "queued" || r.status === "waiting");
+}
 
 function refreshDeployStatus(callback) {
   if (deployFetchInProgress || !githubRepo) { if (callback) callback(); return; }
   deployFetchInProgress = true;
   const ghPath = process.platform === "darwin" ? "/opt/homebrew/bin/gh" : "gh";
   exec(
-    `${ghPath} api 'repos/${githubRepo}/actions/runs?per_page=10' --cache 30s`,
+    `${ghPath} api 'repos/${githubRepo}/actions/runs?per_page=10'`,
     { encoding: "utf-8", timeout: 15000 },
     (err, stdout) => {
       deployFetchInProgress = false;
@@ -1261,7 +1319,11 @@ function buildDeploySubmenu() {
     label: "Refresh",
     click: () => {
       refreshDeployStatus(() => {
-        try { tray.setContextMenu(buildTrayMenu(hooksActiveGlobal)); } catch (e) {}
+        try {
+          tray.setContextMenu(buildTrayMenu(hooksActiveGlobal));
+          if (global._rebuildDockMenu) global._rebuildDockMenu();
+          scheduleDeployPoll();
+        } catch (e) {}
       });
     },
   });
@@ -1296,6 +1358,20 @@ function configureGithubRepo() {
     // Fallback: open settings file for manual editing
     shell.openPath(SETTINGS_FILE);
   }
+}
+
+function onDeployRefreshed() {
+  try {
+    tray.setContextMenu(buildTrayMenu(hooksActiveGlobal));
+    if (global._rebuildDockMenu) global._rebuildDockMenu();
+  } catch (e) {}
+  scheduleDeployPoll();
+}
+
+function scheduleDeployPoll() {
+  if (deployPollTimer) clearTimeout(deployPollTimer);
+  const interval = hasActiveRun() ? DEPLOY_POLL_FAST : DEPLOY_POLL_SLOW;
+  deployPollTimer = setTimeout(() => refreshDeployStatus(onDeployRefreshed), interval);
 }
 
 function buildTrayMenu(hooksActive) {
@@ -1588,25 +1664,19 @@ app.whenReady().then(() => {
       app.dock.setMenu(Menu.buildFromTemplate(dockItems));
     }
     rebuildDockMenu();
-    // Rebuild dock menu when deploy data refreshes
-    global._rebuildDockMenu = rebuildDockMenu;
+    // Rebuild dock menu and refresh dock icon dot when deploy data refreshes
+    global._rebuildDockMenu = () => {
+      rebuildDockMenu();
+      // Re-apply current dock state so the deploy status dot updates
+      const frames = dockFrames[dockCurrentState];
+      if (frames && frames.length > 0) {
+        setDockIcon(frames[dockCurrentFrame % frames.length]);
+      }
+    };
   }
 
-  // Fetch deploy status on launch, then every 45 seconds
-  refreshDeployStatus(() => {
-    try {
-      tray.setContextMenu(buildTrayMenu(hooksActive));
-      if (global._rebuildDockMenu) global._rebuildDockMenu();
-    } catch (e) {}
-  });
-  setInterval(() => {
-    refreshDeployStatus(() => {
-      try {
-        tray.setContextMenu(buildTrayMenu(hooksActiveGlobal));
-        if (global._rebuildDockMenu) global._rebuildDockMenu();
-      } catch (e) {}
-    });
-  }, 45000);
+  // Adaptive deploy polling: 10s during active runs, 60s when idle
+  refreshDeployStatus(onDeployRefreshed);
 
   // Refresh tray menu periodically so stats stay current
   setInterval(() => {

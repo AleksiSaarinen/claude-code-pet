@@ -1297,11 +1297,12 @@ function formatTimeAgo(dateStr) {
 }
 
 function deployStatusIcon(run) {
-  if (run.status !== "completed") return "\u{1F7E1}";
+  if (run.status === "in_progress") return "\u{1F7E1}";  // yellow — actively running
+  if (run.status !== "completed") return "\u23F3";         // hourglass — queued/pending/waiting
   if (run.conclusion === "success") return "\u2705";
   if (run.conclusion === "failure") return "\u274C";
   if (run.conclusion === "cancelled") return "\u26AA";
-  return "\u23F3";
+  return "\u2705";
 }
 
 function buildDeploySubmenu() {

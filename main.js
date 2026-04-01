@@ -735,45 +735,56 @@ function resolveState(stateName) {
   return "idle";
 }
 
-function getDeployDotColor() {
+function getDeployBarState() {
   if (cachedWorkflowRuns.length === 0) return null;
   const latest = cachedWorkflowRuns[0];
-  if (latest.status === "in_progress" || latest.status === "queued" || latest.status === "waiting") return { r: 255, g: 200, b: 0 };
-  if (latest.conclusion === "success") return { r: 50, g: 205, b: 50 };
-  if (latest.conclusion === "failure") return { r: 240, g: 50, b: 50 };
-  if (latest.conclusion === "cancelled") return { r: 150, g: 150, b: 150 };
+  const isActive = latest.status === "in_progress" || latest.status === "queued" || latest.status === "waiting";
+
+  if (isActive) {
+    // Estimate progress from elapsed time vs average completed run duration
+    const startTime = new Date(latest.run_started_at || latest.created_at).getTime();
+    const elapsed = Date.now() - startTime;
+    // Calculate average duration from recent completed runs of the same workflow
+    const completed = cachedWorkflowRuns.filter(r => r.status === "completed" && r.name === latest.name && r.run_started_at);
+    let avgDuration = 180000; // default 3 min
+    if (completed.length > 0) {
+      const durations = completed.map(r => new Date(r.updated_at).getTime() - new Date(r.run_started_at).getTime());
+      avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+    }
+    const progress = Math.min(elapsed / avgDuration, 0.95); // cap at 95% until done
+    return { color: { r: 255, g: 200, b: 0 }, progress };
+  }
+  if (latest.conclusion === "success") return { color: { r: 50, g: 205, b: 50 }, progress: 1 };
+  if (latest.conclusion === "failure") return { color: { r: 240, g: 50, b: 50 }, progress: 1 };
+  if (latest.conclusion === "cancelled") return { color: { r: 150, g: 150, b: 150 }, progress: 1 };
   return null;
 }
 
-function addDeployDot(frameImg) {
-  const color = getDeployDotColor();
-  if (!color) return frameImg;
+function addDeployBar(frameImg) {
+  const state = getDeployBarState();
+  if (!state) return frameImg;
   const logicalSize = frameImg.getSize();
   const bitmap = Buffer.from(frameImg.toBitmap());
   const bpp = 4;
-  // toBitmap() returns actual pixels; getSize() returns logical (DIP) size
   const totalPixels = bitmap.length / bpp;
-  const pixelWidth = Math.round(Math.sqrt(totalPixels * (logicalSize.width / logicalSize.height)));
-  const scale = pixelWidth / logicalSize.width;
-  const w = Math.round(logicalSize.width * scale);
-  const h = Math.round(logicalSize.height * scale);
-  const dotRadius = Math.round(7 * scale);
-  const borderWidth = Math.round(1.5 * scale);
-  const cx = w - dotRadius - Math.round(3 * scale);
-  const cy = h - dotRadius - Math.round(3 * scale);
+  const w = Math.round(Math.sqrt(totalPixels * (logicalSize.width / logicalSize.height)));
+  const h = Math.round(totalPixels / w);
+  const barHeight = Math.max(Math.round(h * 0.04), 3); // ~4% of icon height
+  const margin = Math.round(w * 0.1); // 10% margin on each side
+  const barWidth = w - margin * 2;
+  const fillWidth = Math.round(barWidth * state.progress);
+  const barY = h - barHeight - Math.round(h * 0.02); // slight offset from bottom
 
-  for (let y = cy - dotRadius - borderWidth; y <= cy + dotRadius + borderWidth; y++) {
-    for (let x = cx - dotRadius - borderWidth; x <= cx + dotRadius + borderWidth; x++) {
+  for (let y = barY; y < barY + barHeight; y++) {
+    for (let x = margin; x < margin + barWidth; x++) {
       if (x < 0 || x >= w || y < 0 || y >= h) continue;
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-      if (dist <= dotRadius + borderWidth) {
-        const offset = (y * w + x) * bpp;
-        if (dist > dotRadius) {
-          bitmap[offset] = 20; bitmap[offset + 1] = 20; bitmap[offset + 2] = 20; bitmap[offset + 3] = 255;
-        } else {
-          // toBitmap() returns BGRA on macOS
-          bitmap[offset] = color.b; bitmap[offset + 1] = color.g; bitmap[offset + 2] = color.r; bitmap[offset + 3] = 255;
-        }
+      const offset = (y * w + x) * bpp;
+      if (x < margin + fillWidth) {
+        // Filled portion — BGRA on macOS
+        bitmap[offset] = state.color.b; bitmap[offset + 1] = state.color.g; bitmap[offset + 2] = state.color.r; bitmap[offset + 3] = 255;
+      } else {
+        // Unfilled background
+        bitmap[offset] = 40; bitmap[offset + 1] = 40; bitmap[offset + 2] = 40; bitmap[offset + 3] = 180;
       }
     }
   }
@@ -781,7 +792,7 @@ function addDeployDot(frameImg) {
 }
 
 function setDockIcon(frame) {
-  try { app.dock.setIcon(addDeployDot(frame)); } catch (e) {}
+  try { app.dock.setIcon(addDeployBar(frame)); } catch (e) {}
 }
 
 function setDockState(stateName) {
@@ -1249,6 +1260,8 @@ function refreshDeployStatus(callback) {
           display_title: r.display_title,
           run_number: r.run_number,
           created_at: r.created_at,
+          updated_at: r.updated_at,
+          run_started_at: r.run_started_at,
           actor: r.actor?.login || "unknown",
           html_url: r.html_url,
         }));

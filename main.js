@@ -752,13 +752,13 @@ function addDeployDot(frameImg) {
   const bitmap = Buffer.from(frameImg.toBitmap());
   const bpp = 4;
   // toBitmap() returns actual pixels; getSize() returns logical (DIP) size
-  const pixelWidth = bitmap.length / bpp / logicalSize.height;
-  // If bitmap is larger than logical size, we're on a HiDPI display
+  const totalPixels = bitmap.length / bpp;
+  const pixelWidth = Math.round(Math.sqrt(totalPixels * (logicalSize.width / logicalSize.height)));
   const scale = pixelWidth / logicalSize.width;
   const w = Math.round(logicalSize.width * scale);
   const h = Math.round(logicalSize.height * scale);
-  const dotRadius = Math.round(10 * scale);
-  const borderWidth = Math.round(2 * scale);
+  const dotRadius = Math.round(7 * scale);
+  const borderWidth = Math.round(1.5 * scale);
   const cx = w - dotRadius - Math.round(3 * scale);
   const cy = h - dotRadius - Math.round(3 * scale);
 
@@ -777,7 +777,7 @@ function addDeployDot(frameImg) {
       }
     }
   }
-  return nativeImage.createFromBuffer(bitmap, { width: w, height: h, scaleFactor: scale });
+  return nativeImage.createFromBuffer(bitmap, { width: w, height: h });
 }
 
 function setDockIcon(frame) {
@@ -1360,9 +1360,22 @@ function configureGithubRepo() {
   }
 }
 
+function buildTrayTooltip() {
+  if (cachedWorkflowRuns.length === 0) return "Claude Code Pet";
+  const lines = ["Claude Code Pet — Deploy Status"];
+  for (const run of cachedWorkflowRuns.slice(0, 4)) {
+    const icon = run.status === "in_progress" || run.status === "queued" || run.status === "waiting"
+      ? "\u{1F7E1}" : run.conclusion === "success" ? "\u2705" : run.conclusion === "failure" ? "\u274C" : "\u26AA";
+    const title = run.display_title.length > 35 ? run.display_title.substring(0, 32) + "..." : run.display_title;
+    lines.push(`${icon} ${title} (${formatTimeAgo(run.created_at)})`);
+  }
+  return lines.join("\n");
+}
+
 function onDeployRefreshed() {
   try {
     tray.setContextMenu(buildTrayMenu(hooksActiveGlobal));
+    tray.setToolTip(buildTrayTooltip());
     if (global._rebuildDockMenu) global._rebuildDockMenu();
   } catch (e) {}
   scheduleDeployPoll();

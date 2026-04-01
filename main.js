@@ -738,7 +738,7 @@ function resolveState(stateName) {
 function getDeployBarState() {
   if (cachedWorkflowRuns.length === 0) return null;
   const latest = cachedWorkflowRuns[0];
-  const isActive = latest.status === "in_progress" || latest.status === "queued" || latest.status === "waiting";
+  const isActive = latest.status !== "completed";
 
   if (isActive) {
     // Estimate progress from elapsed time vs average completed run duration
@@ -1243,7 +1243,7 @@ const DEPLOY_POLL_FAST = 5000;   // 5s always
 const DEPLOY_POLL_SLOW = 5000;
 
 function hasActiveRun() {
-  return cachedWorkflowRuns.some(r => r.status === "in_progress" || r.status === "queued" || r.status === "waiting");
+  return cachedWorkflowRuns.some(r => r.status !== "completed");
 }
 
 function refreshDeployStatus(callback) {
@@ -1297,7 +1297,7 @@ function formatTimeAgo(dateStr) {
 }
 
 function deployStatusIcon(run) {
-  if (run.status === "in_progress" || run.status === "queued" || run.status === "waiting") return "\u{1F7E1}";
+  if (run.status !== "completed") return "\u{1F7E1}";
   if (run.conclusion === "success") return "\u2705";
   if (run.conclusion === "failure") return "\u274C";
   if (run.conclusion === "cancelled") return "\u26AA";

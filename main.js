@@ -769,22 +769,33 @@ function addDeployBar(frameImg) {
   const totalPixels = bitmap.length / bpp;
   const w = Math.round(Math.sqrt(totalPixels * (logicalSize.width / logicalSize.height)));
   const h = Math.round(totalPixels / w);
-  const barHeight = Math.max(Math.round(h * 0.04), 3); // ~4% of icon height
-  const margin = Math.round(w * 0.1); // 10% margin on each side
+  const barHeight = Math.max(Math.round(h * 0.04), 3);
+  const margin = Math.round(w * 0.1);
   const barWidth = w - margin * 2;
-  const fillWidth = Math.round(barWidth * state.progress);
-  const barY = h - barHeight - Math.round(h * 0.02); // slight offset from bottom
+  const clampedProgress = 0.1 + state.progress * 0.9; // min 10%, scales to 100%
+  const fillWidth = Math.round(barWidth * clampedProgress);
+  const barY = h - barHeight - Math.round(h * 0.06);
+  const border = Math.max(Math.round(1 * (w / 128)), 1);
 
+  // Draw border (dark outline for contrast)
+  for (let y = barY - border; y < barY + barHeight + border; y++) {
+    for (let x = margin - border; x < margin + barWidth + border; x++) {
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      const offset = (y * w + x) * bpp;
+      bitmap[offset] = 0; bitmap[offset + 1] = 0; bitmap[offset + 2] = 0; bitmap[offset + 3] = 220;
+    }
+  }
+  // Draw bar fill and background
   for (let y = barY; y < barY + barHeight; y++) {
     for (let x = margin; x < margin + barWidth; x++) {
       if (x < 0 || x >= w || y < 0 || y >= h) continue;
       const offset = (y * w + x) * bpp;
       if (x < margin + fillWidth) {
-        // Filled portion — BGRA on macOS
+        // Filled — BGRA on macOS
         bitmap[offset] = state.color.b; bitmap[offset + 1] = state.color.g; bitmap[offset + 2] = state.color.r; bitmap[offset + 3] = 255;
       } else {
-        // Unfilled background
-        bitmap[offset] = 40; bitmap[offset + 1] = 40; bitmap[offset + 2] = 40; bitmap[offset + 3] = 180;
+        // Unfilled — dark with some opacity
+        bitmap[offset] = 30; bitmap[offset + 1] = 30; bitmap[offset + 2] = 30; bitmap[offset + 3] = 200;
       }
     }
   }

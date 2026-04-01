@@ -1,5 +1,6 @@
 // main.js - Electron main process
-const { app, BrowserWindow, Tray, Menu, screen, dialog, ipcMain, nativeImage } = require("electron");
+const { app, BrowserWindow, Tray, Menu, screen, dialog, ipcMain, nativeImage, shell } = require("electron");
+const { exec } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -59,6 +60,8 @@ const WINDOW_SIZES = {
 let windowSize = "normal";
 let speechBubblesEnabled = true;
 let floatingPetVisible = true;
+let githubRepo = "Frogmind/altegro";
+let hooksActiveGlobal = false; // module-level mirror for use in async callbacks
 
 // Ensure status file exists
 if (!fs.existsSync(STATUS_FILE)) fs.writeFileSync(STATUS_FILE, "idle");
@@ -601,13 +604,14 @@ function loadSettings() {
       }
       if (data.speechBubblesEnabled !== undefined) speechBubblesEnabled = data.speechBubblesEnabled;
       if (data.floatingPetVisible !== undefined) floatingPetVisible = data.floatingPetVisible;
+      if (data.githubRepo) githubRepo = data.githubRepo;
     }
   } catch (e) { /* use defaults */ }
 }
 
 function saveSettings() {
   try {
-    const obj = { windowSize, speechBubblesEnabled, floatingPetVisible };
+    const obj = { windowSize, speechBubblesEnabled, floatingPetVisible, githubRepo };
     if (win && !win.isDestroyed()) {
       const b = win.getBounds();
       obj.windowPos = { x: b.x, y: b.y };
@@ -778,7 +782,7 @@ function getNodePath() {
   const nodePath = process.execPath;
   // If running in Electron, process.execPath is the Electron binary, not node.
   // Fall back to finding node on PATH via 'where' (Windows) or 'which' (Unix).
-  if (nodePath.toLowerCase().includes("electron") || nodePath.toLowerCase().includes("claude-code-pet")) {
+  if (nodePath.toLowerCase().includes("electron") || nodePath.toLowerCase().includes("claude-code-pet") || nodePath.toLowerCase().includes("claude code pet")) {
     // On macOS/Linux, check common node locations first (shell PATH may not be
     // available when Electron launches at login before the user's shell profile)
     if (process.platform !== "win32") {
@@ -1157,6 +1161,143 @@ function buildAchievementsSubmenu() {
   return items;
 }
 
+// ── Deploy Status (GitHub Actions) ──────────────────────────────────────────
+
+let cachedWorkflowRuns = [];
+let deployFetchInProgress = false;
+
+function refreshDeployStatus(callback) {
+  if (deployFetchInProgress || !githubRepo) { if (callback) callback(); return; }
+  deployFetchInProgress = true;
+  const ghPath = process.platform === "darwin" ? "/opt/homebrew/bin/gh" : "gh";
+  exec(
+    `${ghPath} api 'repos/${githubRepo}/actions/runs?per_page=10' --cache 30s`,
+    { encoding: "utf-8", timeout: 15000 },
+    (err, stdout) => {
+      deployFetchInProgress = false;
+      if (err) {
+        console.error("Deploy status fetch failed:", err.message);
+        if (callback) callback();
+        return;
+      }
+      try {
+        const data = JSON.parse(stdout);
+        cachedWorkflowRuns = (data.workflow_runs || []).map(r => ({
+          id: r.id,
+          name: r.name,
+          status: r.status,
+          conclusion: r.conclusion,
+          head_branch: r.head_branch,
+          display_title: r.display_title,
+          run_number: r.run_number,
+          created_at: r.created_at,
+          actor: r.actor?.login || "unknown",
+          html_url: r.html_url,
+        }));
+        console.log("Deploy status refreshed:", cachedWorkflowRuns.length, "runs");
+      } catch (e) {
+        console.error("Deploy status parse failed:", e.message);
+      }
+      if (callback) callback();
+    }
+  );
+}
+
+function formatTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function deployStatusIcon(run) {
+  if (run.status === "in_progress" || run.status === "queued" || run.status === "waiting") return "\u{1F7E1}";
+  if (run.conclusion === "success") return "\u2705";
+  if (run.conclusion === "failure") return "\u274C";
+  if (run.conclusion === "cancelled") return "\u26AA";
+  return "\u23F3";
+}
+
+function buildDeploySubmenu() {
+  const items = [
+    { label: `\u{1F4E6} ${githubRepo}`, enabled: false },
+    { type: "separator" },
+  ];
+
+  if (cachedWorkflowRuns.length === 0) {
+    items.push({ label: "Loading...", enabled: false });
+  } else {
+    for (const run of cachedWorkflowRuns) {
+      const icon = deployStatusIcon(run);
+      const title = run.display_title.length > 45
+        ? run.display_title.substring(0, 42) + "..."
+        : run.display_title;
+      const time = formatTimeAgo(run.created_at);
+      const statusText = run.status === "completed"
+        ? run.conclusion
+        : run.status.replace(/_/g, " ");
+
+      items.push({
+        label: `${icon} ${title}`,
+        submenu: [
+          { label: `#${run.run_number} \u2014 ${run.name}`, enabled: false },
+          { label: `Branch: ${run.head_branch}`, enabled: false },
+          { label: `By: ${run.actor}`, enabled: false },
+          { label: `Status: ${statusText}`, enabled: false },
+          { label: time, enabled: false },
+          { type: "separator" },
+          { label: "Open in GitHub", click: () => shell.openExternal(run.html_url) },
+        ],
+      });
+    }
+  }
+
+  items.push({ type: "separator" });
+  items.push({
+    label: "Refresh",
+    click: () => {
+      refreshDeployStatus(() => {
+        try { tray.setContextMenu(buildTrayMenu(hooksActiveGlobal)); } catch (e) {}
+      });
+    },
+  });
+  items.push({
+    label: "Open Actions Page",
+    click: () => shell.openExternal(`https://github.com/${githubRepo}/actions`),
+  });
+  items.push({
+    label: "Configure Repo...",
+    click: () => configureGithubRepo(),
+  });
+
+  return items;
+}
+
+function configureGithubRepo() {
+  if (process.platform === "darwin") {
+    exec(
+      `osascript -e 'set theRepo to text returned of (display dialog "GitHub repo (owner/repo):" default answer "${githubRepo}" with title "Deploy Status")'`,
+      (err, stdout) => {
+        if (!err && stdout.trim()) {
+          githubRepo = stdout.trim();
+          cachedWorkflowRuns = [];
+          saveSettings();
+          refreshDeployStatus(() => {
+            try { tray.setContextMenu(buildTrayMenu(hooksActiveGlobal)); } catch (e) {}
+          });
+        }
+      }
+    );
+  } else {
+    // Fallback: open settings file for manual editing
+    shell.openPath(SETTINGS_FILE);
+  }
+}
+
 function buildTrayMenu(hooksActive) {
   return Menu.buildFromTemplate([
     {
@@ -1168,6 +1309,7 @@ function buildTrayMenu(hooksActive) {
       click: () => {
         try {
           setupHooks();
+          hooksActiveGlobal = true;
           tray.setContextMenu(buildTrayMenu(true));
           dialog.showMessageBox({
             message:
@@ -1185,6 +1327,7 @@ function buildTrayMenu(hooksActive) {
       click: () => {
         try {
           removeHooks();
+          hooksActiveGlobal = false;
           tray.setContextMenu(buildTrayMenu(false));
         } catch (e) {
           // ignore
@@ -1203,6 +1346,10 @@ function buildTrayMenu(hooksActive) {
     {
       label: "Character",
       submenu: buildCharacterSubmenu(hooksActive),
+    },
+    {
+      label: "Deploy Status",
+      submenu: buildDeploySubmenu(),
     },
     {
       label: "Speech Bubbles",
@@ -1389,6 +1536,7 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error("Could not auto-setup hooks:", e.message);
   }
+  hooksActiveGlobal = hooksActive;
 
   loadSettings();
   createWindow();
@@ -1401,22 +1549,64 @@ app.whenReady().then(() => {
 
   // macOS Dock right-click menu
   if (process.platform === "darwin" && app.dock) {
-    const dockMenu = Menu.buildFromTemplate([
-      {
-        label: "Show/Hide Floating Pet",
-        click: () => {
-          floatingPetVisible = !floatingPetVisible;
-          if (floatingPetVisible) {
-            win.show();
-          } else {
-            win.hide();
-          }
-          saveSettings();
+    function rebuildDockMenu() {
+      const dockItems = [
+        {
+          label: "Show/Hide Floating Pet",
+          click: () => {
+            floatingPetVisible = !floatingPetVisible;
+            if (floatingPetVisible) { win.show(); } else { win.hide(); }
+            saveSettings();
+          },
         },
-      },
-    ]);
-    app.dock.setMenu(dockMenu);
+        { type: "separator" },
+        { label: `\u{1F4E6} Deploy Status`, enabled: false },
+      ];
+
+      if (cachedWorkflowRuns.length === 0) {
+        dockItems.push({ label: "  Loading...", enabled: false });
+      } else {
+        for (const run of cachedWorkflowRuns.slice(0, 6)) {
+          const icon = deployStatusIcon(run);
+          const title = run.display_title.length > 40
+            ? run.display_title.substring(0, 37) + "..."
+            : run.display_title;
+          const time = formatTimeAgo(run.created_at);
+          dockItems.push({
+            label: `${icon} ${title} (${time})`,
+            click: () => shell.openExternal(run.html_url),
+          });
+        }
+      }
+
+      dockItems.push({ type: "separator" });
+      dockItems.push({
+        label: "Open Actions Page",
+        click: () => shell.openExternal(`https://github.com/${githubRepo}/actions`),
+      });
+
+      app.dock.setMenu(Menu.buildFromTemplate(dockItems));
+    }
+    rebuildDockMenu();
+    // Rebuild dock menu when deploy data refreshes
+    global._rebuildDockMenu = rebuildDockMenu;
   }
+
+  // Fetch deploy status on launch, then every 45 seconds
+  refreshDeployStatus(() => {
+    try {
+      tray.setContextMenu(buildTrayMenu(hooksActive));
+      if (global._rebuildDockMenu) global._rebuildDockMenu();
+    } catch (e) {}
+  });
+  setInterval(() => {
+    refreshDeployStatus(() => {
+      try {
+        tray.setContextMenu(buildTrayMenu(hooksActiveGlobal));
+        if (global._rebuildDockMenu) global._rebuildDockMenu();
+      } catch (e) {}
+    });
+  }, 45000);
 
   // Refresh tray menu periodically so stats stay current
   setInterval(() => {

@@ -737,23 +737,32 @@ function resolveState(stateName) {
 
 function getDeployBarState() {
   if (cachedWorkflowRuns.length === 0) return null;
-  const latest = cachedWorkflowRuns[0];
-  const isActive = latest.status !== "completed";
 
-  if (isActive) {
-    // Estimate progress from elapsed time vs average completed run duration
-    const startTime = new Date(latest.run_started_at || latest.created_at).getTime();
+  // Prioritize: in_progress > queued/pending > latest completed
+  const running = cachedWorkflowRuns.find(r => r.status === "in_progress");
+  const queued = cachedWorkflowRuns.find(r => r.status !== "completed" && r.status !== "in_progress");
+  const completed = cachedWorkflowRuns.filter(r => r.status === "completed" && r.run_started_at);
+
+  let avgDuration = 180000; // default 3 min
+  if (completed.length > 0) {
+    const durations = completed.map(r => new Date(r.updated_at).getTime() - new Date(r.run_started_at).getTime());
+    avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+  }
+
+  if (running) {
+    const startTime = new Date(running.run_started_at || running.created_at).getTime();
     const elapsed = Date.now() - startTime;
-    // Calculate average duration from recent completed runs of the same workflow
-    const completed = cachedWorkflowRuns.filter(r => r.status === "completed" && r.name === latest.name && r.run_started_at);
-    let avgDuration = 180000; // default 3 min
-    if (completed.length > 0) {
-      const durations = completed.map(r => new Date(r.updated_at).getTime() - new Date(r.run_started_at).getTime());
-      avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
-    }
-    const progress = Math.min(elapsed / avgDuration, 0.95); // cap at 95% until done
+    const progress = Math.min(elapsed / avgDuration, 0.95);
     return { color: { r: 255, g: 200, b: 0 }, progress };
   }
+
+  if (queued) {
+    // Queued but not yet running — show minimal progress
+    return { color: { r: 255, g: 200, b: 0 }, progress: 0 };
+  }
+
+  // All completed — show latest result
+  const latest = cachedWorkflowRuns[0];
   if (latest.conclusion === "success") return { color: { r: 50, g: 205, b: 50 }, progress: 1 };
   if (latest.conclusion === "failure") return { color: { r: 240, g: 50, b: 50 }, progress: 1 };
   if (latest.conclusion === "cancelled") return { color: { r: 150, g: 150, b: 150 }, progress: 1 };

@@ -1307,7 +1307,7 @@ function deployStatusIcon(run) {
 
 function buildDeploySubmenu() {
   const items = [
-    { label: `\u{1F4E6} ${githubRepo}`, enabled: false },
+    { label: `\u2014 ${githubRepo} \u2014`, enabled: false },
     { type: "separator" },
   ];
 
@@ -1674,7 +1674,7 @@ app.whenReady().then(() => {
           },
         },
         { type: "separator" },
-        { label: `\u{1F4E6} Deploy Status`, enabled: false },
+        { label: `\u2014 Deploy Status \u2014`, enabled: false },
       ];
 
       if (cachedWorkflowRuns.length === 0) {

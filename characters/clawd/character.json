@@ -7,7 +7,7 @@
   "states": {
     "idle": { "file": "idle.png", "frameCount": 10, "frameDuration": 180, "loop": true },
     "coding": { "file": "coding.png", "frameCount": 10, "frameDuration": 100, "loop": true },
-    "thinking": { "file": "thinking.png", "frameCount": 8, "frameDuration": 200, "loop": true },
+    "thinking": { "file": "thinking.png", "frameCount": 7, "frameDuration": 200, "loop": true },
     "success": { "file": "success.png", "frameCount": 8, "frameDuration": 120, "loop": false },
     "error": { "file": "error.png", "frameCount": 8, "frameDuration": 100, "loop": false },
     "searching": { "file": "searching.png", "frameCount": 8, "frameDuration": 150, "loop": true },

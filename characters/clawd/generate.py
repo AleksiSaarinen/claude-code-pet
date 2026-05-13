@@ -382,6 +382,199 @@ def gen_reading():
     print(f"  reading.png ({frames} frames)")
 
 
+GLOBE_BLUE = (80, 150, 220, 255)
+GLOBE_GREEN = (100, 180, 120, 255)
+GLOBE_SHINE = (180, 210, 250, 255)
+SIGNAL1 = (120, 190, 240, 255)
+SIGNAL2 = (160, 210, 250, 255)
+GEAR = (150, 155, 165, 255)
+GEAR_DARK = (110, 115, 125, 255)
+ROCKET = (200, 80, 60, 255)
+FLAME1 = (255, 180, 50, 255)
+FLAME2 = (255, 120, 30, 255)
+ARROW_UP = (100, 200, 140, 255)
+
+
+def gen_web():
+    """8 frames: crab holding a globe with signal waves, eyes scanning."""
+    frames = 8
+    img = make_image(FW * frames, FH)
+    eye_dirs = ["right", "right", "up", "left", "left", "down", "normal", "right"]
+    bob = [0, -1, -2, -1, 0, -1, -2, -1]
+    for i in range(frames):
+        ox = i * FW
+        draw_crab(img, ox, 0, body_y=bob[i], claw_l=0, claw_r=-S,
+                  leg_phase=i % 2, eyes=eye_dirs[i])
+
+        bx = ox + (FW - 16 * S) // 2 + 3 * S
+        by = (FH - 10 * S) // 2 + bob[i]
+
+        # Globe held by right claw
+        gx = bx + 11 * S
+        gy = by + 1 * S
+        draw_rect(img, gx, gy, 3 * S, 3 * S, GLOBE_BLUE)
+        draw_rect(img, gx + 1 * S, gy, 1 * S, 3 * S, GLOBE_GREEN)
+        draw_rect(img, gx, gy + 1 * S, 3 * S, 1 * S, GLOBE_GREEN)
+        draw_rect(img, gx, gy, 1 * S, 1 * S, GLOBE_SHINE)
+
+        # Signal waves (animated arcs)
+        wave_phase = i % 4
+        for w in range(min(wave_phase + 1, 3)):
+            wx = gx + 3 * S + (w + 1) * S
+            wy = gy - w * S
+            draw_rect(img, wx, wy, 1 * S, 1 * S, SIGNAL1 if w % 2 == 0 else SIGNAL2)
+            if w > 0:
+                draw_rect(img, wx, wy + 2 * S, 1 * S, 1 * S, SIGNAL2 if w % 2 == 0 else SIGNAL1)
+
+    write_png(os.path.join(OUT_DIR, 'web.png'), FW * frames, FH, img)
+    print(f"  web.png ({frames} frames)")
+
+
+def gen_running():
+    """8 frames: crab running fast with a spinning gear, legs blur."""
+    frames = 8
+    img = make_image(FW * frames, FH)
+    for i in range(frames):
+        ox = i * FW
+        # Fast scuttle — larger movement
+        scuttle_x = int(math.sin(i * 1.5) * 6)
+        draw_crab(img, ox, 0, body_x=scuttle_x, body_y=-2 if i % 2 else 0,
+                  claw_l=-S if i % 2 else 0, claw_r=0 if i % 2 else -S,
+                  leg_phase=i % 2, eyes="normal")
+
+        bx = ox + (FW - 16 * S) // 2 + 3 * S + scuttle_x
+        by = (FH - 10 * S) // 2
+
+        # Spinning gear above head
+        gx = bx + 4 * S
+        gy = by - 4 * S
+        # Gear body
+        draw_rect(img, gx, gy, 3 * S, 3 * S, GEAR)
+        draw_rect(img, gx + 1 * S, gy + 1 * S, 1 * S, 1 * S, GEAR_DARK)
+        # Gear teeth rotate
+        tooth_positions = [
+            [(gx - 1 * S, gy + 1 * S), (gx + 3 * S, gy + 1 * S), (gx + 1 * S, gy - 1 * S), (gx + 1 * S, gy + 3 * S)],
+            [(gx - 1 * S, gy), (gx + 3 * S, gy + 2 * S), (gx, gy - 1 * S), (gx + 2 * S, gy + 3 * S)],
+        ]
+        for tx, ty in tooth_positions[i % 2]:
+            draw_rect(img, tx, ty, 1 * S, 1 * S, GEAR)
+
+        # Speed lines behind
+        if i % 2 == 0:
+            draw_rect(img, bx - 3 * S, by + 2 * S, 2 * S, 1 * S, (180, 180, 190, 120))
+            draw_rect(img, bx - 2 * S, by + 5 * S, 1 * S, 1 * S, (180, 180, 190, 80))
+
+    write_png(os.path.join(OUT_DIR, 'running.png'), FW * frames, FH, img)
+    print(f"  running.png ({frames} frames)")
+
+
+def gen_deploying():
+    """8 frames: crab launching a rocket/arrow upward, excited."""
+    frames = 8
+    img = make_image(FW * frames, FH)
+    rocket_y = [0, -2, -5, -9, -14, -20, -26, -30]
+    for i in range(frames):
+        ox = i * FW
+        draw_crab(img, ox, 0, body_y=0,
+                  claw_l=-2*S if i > 2 else 0, claw_r=-2*S if i > 2 else 0,
+                  leg_phase=i % 2,
+                  eyes="up" if i < 5 else "happy")
+
+        bx = ox + (FW - 16 * S) // 2 + 3 * S
+        by = (FH - 10 * S) // 2
+
+        # Rocket/arrow
+        ry = by - 2 * S + rocket_y[i]
+        rx = bx + 4 * S
+        # Arrow tip
+        draw_rect(img, rx + 1 * S, ry, 1 * S, 1 * S, ARROW_UP)
+        # Arrow body
+        draw_rect(img, rx + 1 * S, ry + 1 * S, 1 * S, 2 * S, ARROW_UP)
+        # Arrow wings
+        draw_rect(img, rx, ry + 2 * S, 1 * S, 1 * S, ARROW_UP)
+        draw_rect(img, rx + 2 * S, ry + 2 * S, 1 * S, 1 * S, ARROW_UP)
+
+        # Flame trail
+        if i >= 2:
+            for f in range(min(i - 1, 3)):
+                fy = ry + 3 * S + f * S
+                flame_c = FLAME1 if f % 2 == 0 else FLAME2
+                draw_rect(img, rx + 1 * S, fy, 1 * S, 1 * S, flame_c)
+                if f > 0:
+                    draw_rect(img, rx, fy, 1 * S, 1 * S, FLAME2 if f % 2 == 0 else FLAME1)
+
+        # Sparkle on success frames
+        if i >= 5:
+            draw_rect(img, bx + 9 * S, by - 1 * S, 1 * S, 1 * S, SPARK)
+            draw_rect(img, bx + 1 * S, by - 2 * S, 1 * S, 1 * S, STAR)
+
+    write_png(os.path.join(OUT_DIR, 'deploying.png'), FW * frames, FH, img)
+    print(f"  deploying.png ({frames} frames)")
+
+
+def gen_testing():
+    """10 frames: crab with clipboard/checklist, marking items."""
+    frames = 10
+    img = make_image(FW * frames, FH)
+    for i in range(frames):
+        ox = i * FW
+        bob = int(math.sin(i * 0.6) * 1)
+        draw_crab(img, ox, 0, body_y=bob, claw_l=-S, claw_r=0,
+                  leg_phase=0, eyes="down" if i % 3 != 2 else "normal")
+
+        bx = ox + (FW - 16 * S) // 2 + 3 * S
+        by = (FH - 10 * S) // 2 + bob
+
+        # Clipboard
+        cx = bx + 1 * S
+        cy = by + 7 * S
+        draw_rect(img, cx, cy, 4 * S, 5 * S, BOOK)
+        draw_rect(img, cx + 1 * S, cy + 1 * S, 2 * S, 3 * S, BOOK_PAGE)
+        # Clip top
+        draw_rect(img, cx + 1 * S, cy, 2 * S, 1 * S, GEAR)
+
+        # Checkmarks appear progressively
+        checks = i // 3
+        for c in range(min(checks, 3)):
+            draw_rect(img, cx + 1 * S, cy + (1 + c) * S, 1 * S, 1 * S, GREEN)
+
+        # Pencil in right claw (animated marking)
+        if i % 3 == 0 and checks < 3:
+            px = cx + 1 * S
+            py = cy + (1 + checks) * S
+            draw_rect(img, px + 2 * S, py - 1 * S, 1 * S, 1 * S, SPARK)
+
+    write_png(os.path.join(OUT_DIR, 'testing.png'), FW * frames, FH, img)
+    print(f"  testing.png ({frames} frames)")
+
+
+def gen_sleepy():
+    """10 frames: crab dozing, eyes droopy, Z bubbles rising."""
+    frames = 10
+    img = make_image(FW * frames, FH)
+    DARK_BODY = (170, 95, 65, 255)
+    Z_COLOR = (160, 170, 200, 255)
+    for i in range(frames):
+        ox = i * FW
+        bob = int(math.sin(i * 0.4) * 2)
+        draw_crab(img, ox, 0, body_y=bob, claw_l=0, claw_r=0,
+                  leg_phase=0, eyes="blink" if i % 5 < 4 else "normal",
+                  body_color=DARK_BODY)
+
+        bx = ox + (FW - 16 * S) // 2 + 3 * S
+        by = (FH - 10 * S) // 2 + bob
+
+        # Z bubbles float up
+        phase = i % 5
+        if phase >= 1:
+            draw_rect(img, bx + 10 * S, by - (phase) * S, 1 * S, 1 * S, Z_COLOR)
+        if phase >= 3:
+            draw_rect(img, bx + 11 * S, by - (phase + 1) * S, 1 * S, 1 * S, Z_COLOR)
+
+    write_png(os.path.join(OUT_DIR, 'sleepy.png'), FW * frames, FH, img)
+    print(f"  sleepy.png ({frames} frames)")
+
+
 if __name__ == '__main__':
     print("Generating Clawd crab sprite sheets...")
     gen_idle()
@@ -391,4 +584,9 @@ if __name__ == '__main__':
     gen_error()
     gen_searching()
     gen_reading()
+    gen_web()
+    gen_running()
+    gen_deploying()
+    gen_testing()
+    gen_sleepy()
     print("Done!")
